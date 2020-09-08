@@ -128,6 +128,9 @@ class NativeAuthBackend(BaseAuthBackend):
         if u and u.auth_backend == self.identifier:
             return u
 
+
+# authentication for external users not covered by sso
+# create user in database with random password to not break things
 class AlmaAuthBackend(BaseAuthBackend):
     identifier = 'alma'
     verbose_name = _('external library users')
@@ -147,7 +150,7 @@ class AlmaAuthBackend(BaseAuthBackend):
         return d
 
     def form_authenticate(self, request, form_data):
-        url = 'https://almagw.ub.tuwien.ac.at/ubcgi/xyz123'
+        url = settings.TUW_ALMA_EXTERNAL_URL
         params = {
             "barcode" : form_data['barcode'],
             "verification" : form_data['password'],
@@ -165,15 +168,13 @@ class AlmaAuthBackend(BaseAuthBackend):
                 mail = d['mail']
                 users = User.objects.filter(email=mail)
                 if not users:
-                    password = uuid.uuid4()
                     user = User.objects.create_user(
-                        d['mail'], form_data['password'],
+                        d['mail'], uuid.uuid4(),
                         fullname=d['displayName'],
                         locale=request.LANGUAGE_CODE,
                         timezone=request.timezone if hasattr(request, 'timezone') else settings.TIME_ZONE,
                         auth_backend=self.identifier,
                     )
-
                     user.log_action('pretix.control.auth.user.created', user=user)
                 else:
                     user=users[0]

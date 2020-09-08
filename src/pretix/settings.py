@@ -167,6 +167,8 @@ CURRENCY_PLACES = {
 
 ALLOWED_HOSTS = ['*']
 
+TUW_ALMA_EXTERNAL_URL = config.get('tuw','alma_external_url')
+
 LANGUAGE_CODE = config.get('locale', 'default', fallback='en')
 TIME_ZONE = config.get('locale', 'timezone', fallback='UTC')
 
