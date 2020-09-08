@@ -22,5 +22,6 @@ local/
 .project
 .pydevproject
 .DS_Store
-
+src/pretix/static/custom/
+pretix.cfg
 

@@ -1,10 +1,19 @@
+import re
+import requests
+import uuid
+import time
+
 from collections import OrderedDict
 from importlib import import_module
 
 from django import forms
 from django.conf import settings
-from django.contrib.auth import authenticate
+from django.contrib.auth import (
+    authenticate, login as auth_login, logout as auth_logout,
+)
 from django.utils.translation import gettext_lazy as _
+
+from pretix.base.models import User
 
 
 def get_auth_backends():
@@ -98,7 +107,8 @@ class BaseAuthBackend:
 
 class NativeAuthBackend(BaseAuthBackend):
     identifier = 'native'
-    verbose_name = _('pretix User')
+    verbose_name = _('Admin')
+    order = 3
 
     @property
     def login_form_fields(self) -> dict:
@@ -117,3 +127,72 @@ class NativeAuthBackend(BaseAuthBackend):
         u = authenticate(request=request, email=form_data['email'].lower(), password=form_data['password'])
         if u and u.auth_backend == self.identifier:
             return u
+
+class AlmaAuthBackend(BaseAuthBackend):
+    identifier = 'alma'
+    verbose_name = _('external library users')
+    order = 2
+
+    @property
+    def login_form_fields(self) -> dict:
+        """
+        This property may return form fields that the user needs to fill in
+        to log in.
+        """
+        d = OrderedDict([
+            ('barcode', forms.CharField(label=_("barcode / TUcard-Id"), max_length=254,
+                                       widget=forms.TextInput(attrs={'autofocus': 'autofocus'}))),
+            ('password', forms.CharField(label=_("Password"), widget=forms.PasswordInput)),
+        ])
+        return d
+
+    def form_authenticate(self, request, form_data):
+        url = 'https://almagw.ub.tuwien.ac.at/ubcgi/xyz123'
+        params = {
+            "barcode" : form_data['barcode'],
+            "verification" : form_data['password'],
+        }
+        r = requests.get(url, params=params)
+        if (r.status_code == 200):
+            match = re.search('<body>(.+)</body>',r.text)
+            if match:
+                pairs = match[1].split(":")
+                d = { }
+                for p in pairs:
+                    key, val = p.split('=')
+                    d[key] = val
+
+                mail = d['mail']
+                users = User.objects.filter(email=mail)
+                if not users:
+                    password = uuid.uuid4()
+                    user = User.objects.create_user(
+                        d['mail'], form_data['password'],
+                        fullname=d['displayName'],
+                        locale=request.LANGUAGE_CODE,
+                        timezone=request.timezone if hasattr(request, 'timezone') else settings.TIME_ZONE,
+                        auth_backend=self.identifier,
+                    )
+
+                    user.log_action('pretix.control.auth.user.created', user=user)
+                else:
+                    user=users[0]
+                
+                auth_login(request, user)
+                request.session['pretix_auth_login_time'] = int(time.time())
+                request.session['pretix_auth_long_session'] = (
+                    settings.PRETIX_LONG_SESSIONS and form_data.cleaned_data.get('keep_logged_in', False)
+                )  
+               
+                return user
+
+class SSOAuthBackend(BaseAuthBackend):
+    identifier = 'sso'
+    verbose_name = _('single sign on')
+    order = 1
+
+    def authentication_url(self, request):
+        return "https://some.url"
+
+
+   

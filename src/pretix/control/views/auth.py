@@ -62,25 +62,28 @@ def login(request):
     """
     ctx = {}
     backenddict = get_auth_backends()
-    backends = sorted(backenddict.values(), key=lambda b: (b.identifier != "native", b.verbose_name))
+#    backends = sorted(backenddict.values(), key=lambda b: (b.identifier != "native", b.verbose_name))
+    backends = sorted(backenddict.values(), key=lambda b: (b.order))
     for b in backends:
         u = b.request_authenticate(request)
         if u and u.auth_backend == b.identifier:
             return process_login(request, u, False)
         b.url = b.authentication_url(request)
 
-    backend = backenddict.get(request.GET.get('backend', 'native'), backends[0])
+    backend = backenddict.get(request.GET.get('backend', 'sso'), backends[0])
     if not backend.visible:
         backend = [b for b in backends if b.visible][0]
     if request.user.is_authenticated:
         next_url = backend.get_next_url(request) or 'control:index'
         return redirect(next_url)
     if request.method == 'POST':
-        form = LoginForm(backend=backend, data=request.POST)
+#        form = LoginForm(backend=backend, data=request.POST)
+        form = LoginForm(backend=backend, data=request.POST, request=request)
         if form.is_valid() and form.user_cache and form.user_cache.auth_backend == backend.identifier:
             return process_login(request, form.user_cache, form.cleaned_data.get('keep_logged_in', False))
     else:
-        form = LoginForm(backend=backend)
+#        form = LoginForm(backend=backend)
+        form = LoginForm(backend=backend,request=request)
     ctx['form'] = form
     ctx['can_register'] = settings.PRETIX_REGISTRATION
     ctx['can_reset'] = settings.PRETIX_PASSWORD_RESET
