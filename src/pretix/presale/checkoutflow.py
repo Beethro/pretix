@@ -14,6 +14,7 @@ from django.utils.translation import (
 )
 from django.views.generic.base import TemplateResponseMixin
 from django_scopes import scopes_disabled
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.models import Order
 from pretix.base.models.orders import InvoiceAddress, OrderPayment

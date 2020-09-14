@@ -7,6 +7,7 @@ from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.generic import TemplateView
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.email import get_email_context
 from pretix.base.services.mail import INVALID_ADDRESS, SendMailException, mail

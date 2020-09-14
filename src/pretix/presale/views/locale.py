@@ -4,6 +4,7 @@ from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import View
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.helpers.cookies import set_cookie_without_samesite
 

@@ -6,6 +6,7 @@ from django.utils.decorators import method_decorator
 from django.utils.functional import cached_property
 from django.utils.translation import gettext_lazy as _, pgettext_lazy
 from django.views.generic import FormView
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.models.event import SubEvent
 from pretix.base.templatetags.urlreplace import url_replace

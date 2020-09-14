@@ -6,6 +6,7 @@ from django.shortcuts import redirect
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
 from django.views.generic import View
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.services.cart import CartError
 from pretix.base.signals import validate_cart

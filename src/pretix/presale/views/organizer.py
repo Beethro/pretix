@@ -14,6 +14,7 @@ from django.utils.timezone import now
 from django.views import View
 from django.views.decorators.cache import cache_page
 from django.views.generic import ListView, TemplateView
+from django.contrib.auth.mixins import LoginRequiredMixin
 from pytz import UTC
 
 from pretix.base.i18n import language
@@ -263,7 +264,7 @@ class EventListMixin:
                 self._set_week_to_next_event()
 
 
-class OrganizerIndex(OrganizerViewMixin, EventListMixin, ListView):
+class OrganizerIndex(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, ListView):
     model = Event
     context_object_name = 'events'
     template_name = 'pretixpresale/organizers/index.html'
@@ -437,7 +438,7 @@ def weeks_for_template(ebd, year, month):
     ]
 
 
-class CalendarView(OrganizerViewMixin, EventListMixin, TemplateView):
+class CalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
     template_name = 'pretixpresale/organizers/calendar.html'
 
     def get(self, request, *args, **kwargs):
@@ -481,7 +482,7 @@ class CalendarView(OrganizerViewMixin, EventListMixin, TemplateView):
         return ebd
 
 
-class WeekCalendarView(OrganizerViewMixin, EventListMixin, TemplateView):
+class WeekCalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
     template_name = 'pretixpresale/organizers/calendar_week.html'
 
     def get(self, request, *args, **kwargs):
@@ -532,7 +533,7 @@ class WeekCalendarView(OrganizerViewMixin, EventListMixin, TemplateView):
 
 
 @method_decorator(cache_page(300), name='dispatch')
-class OrganizerIcalDownload(OrganizerViewMixin, View):
+class OrganizerIcalDownload(LoginRequiredMixin, OrganizerViewMixin, View):
     def get(self, request, *args, **kwargs):
         events = list(
             filter_qs_by_attr(
