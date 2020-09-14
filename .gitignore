@@ -24,4 +24,5 @@ local/
 .DS_Store
 src/pretix/static/custom/
 pretix.cfg
+nohup.out
 
