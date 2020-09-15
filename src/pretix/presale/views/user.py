@@ -13,14 +13,15 @@ from pretix.base.services.mail import INVALID_ADDRESS, SendMailException, mail
 from pretix.multidomain.urlreverse import eventreverse
 from pretix.presale.forms.user import ResendLinkForm
 from pretix.presale.views import EventViewMixin
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 
-class ResendLinkView(EventViewMixin, TemplateView):
+class ResendLinkView(TUWLoginRequiredMixin, EventViewMixin, TemplateView):
     template_name = 'pretixpresale/event/resend_link.html'
 
     @cached_property
     def link_form(self):
-        return ResendLinkForm(data=self.request.POST if self.request.method == 'POST' else None)
+        return ResendLinkForm(data=self.request.POST if self.request.method == 'POST' else None, initial={"email" : self.request.user.email})
 
     def post(self, request, *args, **kwargs):
         if not self.link_form.is_valid():
