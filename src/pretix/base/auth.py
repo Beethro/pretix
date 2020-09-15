@@ -142,7 +142,7 @@ class NativeAuthBackend(BaseAuthBackend):
         if user.is_staff:
             next_url = "control:index"
         else:
-            return "/TUW"
+            return "/"+settings.TUW_DEFAULT_ORGANIZER_SLUG
 
 
 # authentication for external users not covered by sso

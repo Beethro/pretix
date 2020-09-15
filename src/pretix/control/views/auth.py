@@ -78,7 +78,7 @@ def login(request):
         if user.is_staff:
             next_url = "control:index"
         else:
-            next_url = "/TUW"
+            next_url = "/"+settings.TUW_DEFAULT_ORGANIZER_SLUG
 
         return redirect(next_url)
     if request.method == 'POST':
