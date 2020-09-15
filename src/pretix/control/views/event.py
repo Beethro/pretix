@@ -47,6 +47,7 @@ from pretix.control.forms.event import (
     TicketSettingsForm, WidgetCodeForm,
 )
 from pretix.control.permissions import EventPermissionRequiredMixin
+from pretix.control.permissions import TUWLoginRequiredMixin
 from pretix.control.views.user import RecentAuthenticationRequiredMixin
 from pretix.helpers.database import rolledback_transaction
 from pretix.multidomain.urlreverse import get_event_domain
@@ -114,7 +115,7 @@ class DecoupleMixin:
                 self.request.event.settings.set(f, self.request.event.settings.get(f))
 
 
-class EventUpdate(DecoupleMixin, EventSettingsViewMixin, EventPermissionRequiredMixin, MetaDataEditorMixin, UpdateView):
+class EventUpdate(TUWLoginRequiredMixin, DecoupleMixin, EventSettingsViewMixin, EventPermissionRequiredMixin, MetaDataEditorMixin, UpdateView):
     model = Event
     form_class = EventUpdateForm
     template_name = 'pretixcontrol/event/settings.html'
