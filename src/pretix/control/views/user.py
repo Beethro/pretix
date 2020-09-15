@@ -156,7 +156,7 @@ class ReauthView(TemplateView):
         )
 
 
-class UserSettings(UpdateView):
+class UserSettings(StaffMemberRequiredMixin, UpdateView):
     model = User
     form_class = UserSettingsForm
     template_name = 'pretixcontrol/user/settings.html'
@@ -208,7 +208,7 @@ class UserSettings(UpdateView):
         return reverse('control:user.settings')
 
 
-class UserHistoryView(ListView):
+class UserHistoryView(StaffMemberRequiredMixin, ListView):
     template_name = 'pretixcontrol/user/history.html'
     model = LogEntry
     context_object_name = 'logs'
@@ -234,7 +234,7 @@ class UserHistoryView(ListView):
         return ctx
 
 
-class User2FAMainView(RecentAuthenticationRequiredMixin, TemplateView):
+class User2FAMainView(StaffMemberRequiredMixin, RecentAuthenticationRequiredMixin, TemplateView):
     template_name = 'pretixcontrol/user/2fa_main.html'
 
     def get_context_data(self, **kwargs):
@@ -589,7 +589,7 @@ class UserNotificationsDisableView(TemplateView):
             )
 
 
-class UserNotificationsEditView(TemplateView):
+class UserNotificationsEditView(StaffMemberRequiredMixin, TemplateView):
     template_name = 'pretixcontrol/user/notifications.html'
 
     @cached_property

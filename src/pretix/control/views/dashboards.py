@@ -19,6 +19,7 @@ from django.utils.formats import date_format
 from django.utils.html import escape
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _, pgettext, ungettext
+from django.contrib.admin.views.decorators import staff_member_required
 
 from pretix.base.decimal import round_decimal
 from pretix.base.models import (
@@ -569,7 +570,7 @@ def user_index_widgets_lazy(request):
     )
     return JsonResponse({'widgets': widgets})
 
-
+@staff_member_required(login_url='/control/login')
 def user_index(request):
     widgets = []
     for r, result in user_dashboard_widgets.send(request, user=request.user):

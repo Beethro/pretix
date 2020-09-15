@@ -15,6 +15,9 @@ from oauth2_provider.views import (
     ApplicationRegistration, ApplicationUpdate,
 )
 
+from pretix.control.permissions import (
+    AdministratorPermissionRequiredMixin, StaffMemberRequiredMixin,
+)
 from pretix.api.models import (
     OAuthAccessToken, OAuthApplication, OAuthRefreshToken,
 )
@@ -23,14 +26,14 @@ from pretix.control.signals import oauth_application_registered
 logger = logging.getLogger(__name__)
 
 
-class OAuthApplicationListView(ApplicationList):
+class OAuthApplicationListView(StaffMemberRequiredMixin, ApplicationList):
     template_name = 'pretixcontrol/oauth/app_list.html'
 
     def get_queryset(self):
         return super().get_queryset().filter(active=True)
 
 
-class OAuthApplicationRegistrationView(ApplicationRegistration):
+class OAuthApplicationRegistrationView(StaffMemberRequiredMixin, ApplicationRegistration):
     template_name = 'pretixcontrol/oauth/app_register.html'
 
     def get_form_class(self):
@@ -77,7 +80,7 @@ class OAuthApplicationUpdateView(ApplicationUpdate):
         return super().get_queryset().filter(active=True)
 
 
-class OAuthApplicationRollView(ApplicationDetail):
+class OAuthApplicationRollView(StaffMemberRequiredMixin, ApplicationDetail):
     template_name = 'pretixcontrol/oauth/app_rollkeys.html'
 
     def post(self, request, *args, **kwargs):
@@ -91,7 +94,7 @@ class OAuthApplicationRollView(ApplicationDetail):
         return super().get_queryset().filter(active=True)
 
 
-class OAuthApplicationDeleteView(ApplicationDelete):
+class OAuthApplicationDeleteView(StaffMemberRequiredMixin, ApplicationDelete):
     template_name = 'pretixcontrol/oauth/app_delete.html'
     success_url = reverse_lazy("control:user.settings.oauth.apps")
 
@@ -105,7 +108,7 @@ class OAuthApplicationDeleteView(ApplicationDelete):
         return HttpResponseRedirect(self.success_url)
 
 
-class AuthorizationListView(ListView):
+class AuthorizationListView(StaffMemberRequiredMixin, ListView):
     template_name = 'pretixcontrol/oauth/authorized.html'
     context_object_name = 'tokens'
 
@@ -122,7 +125,7 @@ class AuthorizationListView(ListView):
         return ctx
 
 
-class AuthorizationRevokeView(DetailView):
+class AuthorizationRevokeView(StaffMemberRequiredMixin, DetailView):
     template_name = 'pretixcontrol/oauth/auth_revoke.html'
     success_url = reverse_lazy("control:user.settings.oauth.list")
 
