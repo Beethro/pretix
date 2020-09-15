@@ -141,4 +141,5 @@ class StaffMemberRequiredMixin:
         return staff_member_required()(view)
 
 class TUWLoginRequiredMixin(LoginRequiredMixin):
-    redirect_field_name = None
+    pass
+#    redirect_field_name = None
