@@ -331,7 +331,7 @@ class QuestionsStep(QuestionsViewMixin, CartMixin, TemplateFlowStep):
         wd = self.cart_session.get('widget_data', {})
         initial = {
             'email': (
-                self.cart_session.get('email', '') or
+                self.cart_session.get('email', self.request.user.email) or
                 wd.get('email', '')
             )
         }
@@ -340,8 +340,10 @@ class QuestionsStep(QuestionsViewMixin, CartMixin, TemplateFlowStep):
                         event=self.request.event,
                         request=self.request,
                         initial=initial, all_optional=self.all_optional)
-        if wd.get('email', '') and wd.get('fix', '') == "true":
-            f.fields['email'].disabled = True
+#        if wd.get('email', '') and wd.get('fix', '') == "true":
+        #    f.fields['email'].disabled = True
+
+        f.fields['email'].disabled = True
         return f
 
     @cached_property
