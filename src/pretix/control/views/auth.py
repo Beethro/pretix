@@ -74,7 +74,12 @@ def login(request):
     if not backend.visible:
         backend = [b for b in backends if b.visible][0]
     if request.user.is_authenticated:
-        next_url = backend.get_next_url(request) or 'control:index'
+        user = request.user
+        if user.is_staff:
+            next_url = "control:index"
+        else:
+            next_url = "/TUW"
+
         return redirect(next_url)
     if request.method == 'POST':
 #        form = LoginForm(backend=backend, data=request.POST)

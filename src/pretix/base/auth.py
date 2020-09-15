@@ -126,7 +126,21 @@ class NativeAuthBackend(BaseAuthBackend):
     def form_authenticate(self, request, form_data):
         u = authenticate(request=request, email=form_data['email'].lower(), password=form_data['password'])
         if u and u.auth_backend == self.identifier:
+            request.user = u
             return u
+
+    def get_next_url(self, request):
+        """
+        This method will be called after a successful login to determine the next URL. Pretix in general uses the
+        ``'next'`` query parameter. However, external authentication methods could use custom attributes with hardcoded
+        names for security purposes. For example, OAuth uses ``'state'`` for keeping track of application state.
+        """
+
+        user = request.user
+        if user.is_staff:
+            next_url = "control:index"
+        else:
+            return "/TUW"
 
 
 # authentication for external users not covered by sso
@@ -186,6 +200,18 @@ class AlmaAuthBackend(BaseAuthBackend):
                 )  
                
                 return user
+
+    def get_next_url(self, request):
+        """
+        This method will be called after a successful login to determine the next URL. Pretix in general uses the
+        ``'next'`` query parameter. However, external authentication methods could use custom attributes with hardcoded
+        names for security purposes. For example, OAuth uses ``'state'`` for keeping track of application state.
+        """
+
+        print (request)
+        if "next" in request.GET:
+            return request.GET.get("next")
+        return None                
 
 class SSOAuthBackend(BaseAuthBackend):
     identifier = 'sso'
