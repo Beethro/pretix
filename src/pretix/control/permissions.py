@@ -4,6 +4,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext as _
+from django.contrib.auth.mixins import LoginRequiredMixin
 
 
 def event_permission_required(permission):
@@ -138,3 +139,6 @@ class StaffMemberRequiredMixin:
     def as_view(cls, **initkwargs):
         view = super(StaffMemberRequiredMixin, cls).as_view(**initkwargs)
         return staff_member_required()(view)
+
+class TUWLoginRequiredMixin(LoginRequiredMixin):
+    redirect_field_name = None

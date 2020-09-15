@@ -2,7 +2,6 @@ import json
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils.functional import cached_property
@@ -19,7 +18,6 @@ from pretix.control.forms.users import UserEditForm
 from pretix.control.permissions import AdministratorPermissionRequiredMixin
 from pretix.control.views import CreateView, UpdateView
 from pretix.control.views.user import RecentAuthenticationRequiredMixin
-
 
 class UserListView(AdministratorPermissionRequiredMixin, ListView):
     template_name = 'pretixcontrol/users/index.html'
@@ -155,7 +153,7 @@ class UserImpersonateView(AdministratorPermissionRequiredMixin, RecentAuthentica
         return redirect(reverse('control:index'))
 
 
-class UserImpersonateStopView(LoginRequiredMixin, View):
+class UserImpersonateStopView(View):
 
     def post(self, request, *args, **kwargs):
         impersonated = request.user

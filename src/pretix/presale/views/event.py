@@ -19,7 +19,6 @@ from django.utils.translation import gettext_lazy as _, pgettext_lazy
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.channels import get_all_sales_channels
 from pretix.base.models import ItemVariation, Quota, SeatCategoryMapping
@@ -35,6 +34,7 @@ from pretix.presale.views.organizer import (
     EventListMixin, add_subevents_for_days, days_for_template,
     filter_qs_by_attr, weeks_for_template,
 )
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 from ...helpers.formats.en.formats import WEEK_FORMAT
 from . import (
@@ -301,7 +301,7 @@ def get_grouped_items(event, subevent=None, voucher=None, channel='web', require
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class EventIndex(EventViewMixin, EventListMixin, CartMixin, TemplateView):
+class EventIndex(TUWLoginRequiredMixin, EventViewMixin, EventListMixin, CartMixin, TemplateView):
     template_name = "pretixpresale/event/index.html"
 
     def get(self, request, *args, **kwargs):

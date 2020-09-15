@@ -19,7 +19,6 @@ from django.utils.translation import gettext as _
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import TemplateView, View
 from django_scopes import scopes_disabled
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.models import (
     CartPosition, InvoiceAddress, QuestionAnswer, SubEvent, Voucher,
@@ -38,6 +37,8 @@ from pretix.presale.views.event import (
     get_grouped_items, item_group_by_category,
 )
 from pretix.presale.views.robots import NoSearchIndexViewMixin
+from pretix.control.permissions import TUWLoginRequiredMixin
+
 
 try:
     widget_data_cache = caches['redis']
@@ -333,7 +334,7 @@ def cart_session(request):
 
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
-class CartApplyVoucher(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
+class CartApplyVoucher(TUWLoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
     task = apply_voucher
     known_errortypes = ['CartError']
 
@@ -354,7 +355,7 @@ class CartApplyVoucher(LoginRequiredMixin, EventViewMixin, CartActionMixin, Asyn
 
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
-class CartRemove(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
+class CartRemove(TUWLoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
     task = remove_cart_position
     known_errortypes = ['CartError']
 
@@ -379,7 +380,7 @@ class CartRemove(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncActio
 
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
-class CartClear(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
+class CartClear(TUWLoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
     task = clear_cart
     known_errortypes = ['CartError']
 
@@ -395,7 +396,7 @@ class CartClear(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction
 @method_decorator(allow_cors_if_namespaced, 'dispatch')
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class CartAdd(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
+class CartAdd(TUWLoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, View):
     task = add_items_to_cart
     known_errortypes = ['CartError']
 
@@ -443,7 +444,7 @@ class CartAdd(LoginRequiredMixin, EventViewMixin, CartActionMixin, AsyncAction, 
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class RedeemView(LoginRequiredMixin, NoSearchIndexViewMixin, EventViewMixin, TemplateView):
+class RedeemView(TUWLoginRequiredMixin, NoSearchIndexViewMixin, EventViewMixin, TemplateView):
     template_name = "pretixpresale/event/voucher.html"
 
     def get_context_data(self, **kwargs):

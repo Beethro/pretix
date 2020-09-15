@@ -6,6 +6,7 @@ import time
 from collections import OrderedDict
 from importlib import import_module
 
+
 from django import forms
 from django.conf import settings
 from django.contrib.auth import (
@@ -23,6 +24,7 @@ def get_auth_backends():
         b = getattr(import_module(mod), name)()
         backends[b.identifier] = b
     return backends
+
 
 
 class BaseAuthBackend:
@@ -208,7 +210,6 @@ class AlmaAuthBackend(BaseAuthBackend):
         names for security purposes. For example, OAuth uses ``'state'`` for keeping track of application state.
         """
 
-        print (request)
         if "next" in request.GET:
             return request.GET.get("next")
         return None                

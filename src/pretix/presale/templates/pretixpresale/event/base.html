@@ -40,6 +40,10 @@
                                 {{ l.name_local }}</a>
                         {% endfor %}
                     </div>
+                    <a href="{% url 'control:auth.logout' %}" title="{% trans "Log out" %}">
+                        <i class="fa fa-sign-out"></i>
+                        {% trans "Log out" %}
+                    </a>                    
                 </div>
             {% endif %}
         {% endif %}

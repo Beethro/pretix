@@ -28,7 +28,6 @@ from django.views.decorators.http import condition
 from django.views.i18n import (
     JavaScriptCatalog, get_formats, js_catalog_template,
 )
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from lxml import html
 

@@ -14,7 +14,6 @@ from django.utils.translation import (
 )
 from django.views.generic.base import TemplateResponseMixin
 from django_scopes import scopes_disabled
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.models import Order
 from pretix.base.models.orders import InvoiceAddress, OrderPayment
@@ -39,7 +38,6 @@ from pretix.presale.views.cart import (
     cart_session, create_empty_cart_id, get_or_create_cart_id,
 )
 from pretix.presale.views.questions import QuestionsViewMixin
-
 
 class BaseCheckoutFlowStep:
     requires_valid_cart = True

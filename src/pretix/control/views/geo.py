@@ -2,17 +2,17 @@ import logging
 from urllib.parse import quote
 
 import requests
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.views.generic.base import View
 
 from pretix.base.settings import GlobalSettingsObject
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 logger = logging.getLogger(__name__)
 
 
-class GeoCodeView(LoginRequiredMixin, View):
+class GeoCodeView(TUWLoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         gs = GlobalSettingsObject()
         if not gs.settings.opencagedata_apikey:

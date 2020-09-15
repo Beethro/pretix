@@ -46,6 +46,15 @@
 </head>
 <body class="nojs" data-locale="{{ request.LANGUAGE_CODE }}" data-now="{% now "U.u" %}" data-datetimeformat="{{ js_datetime_format }}" data-timeformat="{{ js_time_format }}" data-dateformat="{{ js_date_format }}" data-datetimelocale="{{ js_locale }}" data-currency="{{ request.event.currency }}">
 {{ html_page_header|safe }}
+{% if user.is_authenticated %}
+<div class="pull-right header-part flip hidden-print">
+    {{ user.get_username }}
+    <a href="{% url 'control:auth.logout' %}" title="{% trans "Log out" %}">
+        <i class="fa fa-sign-out"></i>
+        {% trans "Log out" %}
+    </a>  
+</div>
+{% endif %}
 {% block above %}
 {% endblock %}
 <div class="container main-box">

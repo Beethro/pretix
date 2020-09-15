@@ -14,7 +14,6 @@ from django.utils.timezone import now
 from django.views import View
 from django.views.decorators.cache import cache_page
 from django.views.generic import ListView, TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin
 from pytz import UTC
 
 from pretix.base.i18n import language
@@ -27,7 +26,7 @@ from pretix.helpers.formats.de.formats import WEEK_FORMAT
 from pretix.multidomain.urlreverse import eventreverse
 from pretix.presale.ical import get_ical
 from pretix.presale.views import OrganizerViewMixin
-
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 def filter_qs_by_attr(qs, request):
     """
@@ -264,7 +263,7 @@ class EventListMixin:
                 self._set_week_to_next_event()
 
 
-class OrganizerIndex(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, ListView):
+class OrganizerIndex(TUWLoginRequiredMixin, OrganizerViewMixin, EventListMixin, ListView):
     model = Event
     context_object_name = 'events'
     template_name = 'pretixpresale/organizers/index.html'
@@ -438,7 +437,7 @@ def weeks_for_template(ebd, year, month):
     ]
 
 
-class CalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
+class CalendarView(TUWLoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
     template_name = 'pretixpresale/organizers/calendar.html'
 
     def get(self, request, *args, **kwargs):
@@ -482,7 +481,7 @@ class CalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, Templ
         return ebd
 
 
-class WeekCalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
+class WeekCalendarView(TUWLoginRequiredMixin, OrganizerViewMixin, EventListMixin, TemplateView):
     template_name = 'pretixpresale/organizers/calendar_week.html'
 
     def get(self, request, *args, **kwargs):
@@ -533,7 +532,7 @@ class WeekCalendarView(LoginRequiredMixin, OrganizerViewMixin, EventListMixin, T
 
 
 @method_decorator(cache_page(300), name='dispatch')
-class OrganizerIcalDownload(LoginRequiredMixin, OrganizerViewMixin, View):
+class OrganizerIcalDownload(TUWLoginRequiredMixin, OrganizerViewMixin, View):
     def get(self, request, *args, **kwargs):
         events = list(
             filter_qs_by_attr(

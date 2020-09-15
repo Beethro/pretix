@@ -20,7 +20,6 @@ from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import TemplateView, View
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 from pretix.base.models import (
     CachedTicket, GiftCard, Invoice, Order, OrderPosition, Quota,
@@ -50,6 +49,7 @@ from pretix.presale.views import (
     CartMixin, EventViewMixin, iframe_entry_view_wrapper,
 )
 from pretix.presale.views.robots import NoSearchIndexViewMixin
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 
 class OrderDetailMixin(NoSearchIndexViewMixin):
@@ -110,7 +110,7 @@ class OrderPositionDetailMixin(NoSearchIndexViewMixin):
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderOpen(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
+class OrderOpen(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
     def get(self, request, *args, **kwargs):
         if not self.order:
             raise Http404(_('Unknown order code or not authorized to access this order.'))
@@ -144,7 +144,7 @@ class TicketPageMixin:
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderDetails(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, CartMixin, TicketPageMixin, TemplateView):
+class OrderDetails(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, CartMixin, TicketPageMixin, TemplateView):
     template_name = "pretixpresale/event/order.html"
 
     def get(self, request, *args, **kwargs):
@@ -242,7 +242,7 @@ class OrderDetails(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, CartMix
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderPositionDetails(LoginRequiredMixin, EventViewMixin, OrderPositionDetailMixin, CartMixin, TicketPageMixin, TemplateView):
+class OrderPositionDetails(TUWLoginRequiredMixin, EventViewMixin, OrderPositionDetailMixin, CartMixin, TicketPageMixin, TemplateView):
     template_name = "pretixpresale/event/position.html"
 
     def get(self, request, *args, **kwargs):
@@ -288,7 +288,7 @@ class OrderPositionDetails(LoginRequiredMixin, EventViewMixin, OrderPositionDeta
 
 @method_decorator(xframe_options_exempt, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class OrderPaymentStart(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
+class OrderPaymentStart(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
     """
     This is used if a payment is retried or the payment method is changed. It shows the payment
     provider's form that asks for payment details (e.g. CC number).
@@ -351,7 +351,7 @@ class OrderPaymentStart(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, Te
 
 @method_decorator(xframe_options_exempt, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class OrderPaymentConfirm(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
+class OrderPaymentConfirm(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
     """
     This is used if a payment is retried or the payment method is changed. It is shown after the
     payment details have been entered and allows the user to confirm and review the details. On
@@ -409,7 +409,7 @@ class OrderPaymentConfirm(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, 
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderPaymentComplete(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
+class OrderPaymentComplete(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
     """
     This is used for the first try of a payment. This means the user just entered payment
     details and confirmed them during the order process and we don't need to show them again,
@@ -460,7 +460,7 @@ class OrderPaymentComplete(LoginRequiredMixin, EventViewMixin, OrderDetailMixin,
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderPayChangeMethod(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
+class OrderPayChangeMethod(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
     template_name = 'pretixpresale/event/order_pay_change.html'
 
     def dispatch(self, request, *args, **kwargs):
@@ -620,7 +620,7 @@ def can_generate_invoice(event, order, ignore_payments=False):
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderInvoiceCreate(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
+class OrderInvoiceCreate(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
 
     def dispatch(self, request, *args, **kwargs):
         self.request = request
@@ -643,7 +643,7 @@ class OrderInvoiceCreate(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, V
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderModify(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, OrderQuestionsViewMixin, TemplateView):
+class OrderModify(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, OrderQuestionsViewMixin, TemplateView):
     form_class = QuestionsForm
     invoice_form_class = InvoiceAddressForm
     template_name = "pretixpresale/event/order_modify.html"
@@ -717,7 +717,7 @@ class OrderModify(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, OrderQue
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderCancel(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
+class OrderCancel(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, TemplateView):
     template_name = "pretixpresale/event/order_cancel.html"
 
     def dispatch(self, request, *args, **kwargs):
@@ -746,7 +746,7 @@ class OrderCancel(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, Template
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderCancelDo(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, AsyncAction, View):
+class OrderCancelDo(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, AsyncAction, View):
     task = cancel_order
     known_errortypes = ['OrderError']
 
@@ -810,7 +810,7 @@ class OrderCancelDo(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, AsyncA
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class AnswerDownload(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
+class AnswerDownload(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
     def get(self, request, *args, **kwargs):
         answid = kwargs.get('answer')
         token = request.GET.get('token', '')
@@ -923,7 +923,7 @@ class OrderDownloadMixin:
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderDownload(LoginRequiredMixin, OrderDownloadMixin, EventViewMixin, OrderDetailMixin, AsyncAction, View):
+class OrderDownload(TUWLoginRequiredMixin, OrderDownloadMixin, EventViewMixin, OrderDetailMixin, AsyncAction, View):
     task = generate
     known_errortypes = ['OrderError']
 
@@ -945,7 +945,7 @@ class OrderDownload(LoginRequiredMixin, OrderDownloadMixin, EventViewMixin, Orde
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class OrderPositionDownload(LoginRequiredMixin, OrderDownloadMixin, EventViewMixin, OrderPositionDetailMixin, AsyncAction, View):
+class OrderPositionDownload(TUWLoginRequiredMixin, OrderDownloadMixin, EventViewMixin, OrderPositionDetailMixin, AsyncAction, View):
     task = generate
     known_errortypes = ['OrderError']
 
@@ -970,7 +970,7 @@ class OrderPositionDownload(LoginRequiredMixin, OrderDownloadMixin, EventViewMix
 
 
 @method_decorator(xframe_options_exempt, 'dispatch')
-class InvoiceDownload(LoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
+class InvoiceDownload(TUWLoginRequiredMixin, EventViewMixin, OrderDetailMixin, View):
 
     def get(self, request, *args, **kwargs):
         if not self.order:
