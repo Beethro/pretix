@@ -40,7 +40,7 @@ def initial_data(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('pretixbase', '0156_cartposition_override_tax_rate'),
+        ('pretixbase', '0162_remove_seat_name'),
     ]
 
     operations = [
