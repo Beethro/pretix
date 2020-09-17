@@ -50,6 +50,8 @@
                             {% if d.revoked %}<del>{% endif %}
                             {{ d.name }}
                             {% if d.revoked %}</del>{% endif %}
+                            <br>
+                            <small>{{ d.unique_serial }}</small>
                         </td>
                         <td>
                             {{ d.hardware_brand|default_if_none:"" }} {{ d.hardware_model|default_if_none:"" }}
@@ -92,6 +94,11 @@
                                         class="btn btn-default btn-sm">
                                     {% trans "Revoke access" %}</a>
                             {% endif %}
+                            <a href="{% url "control:organizer.device.logs" organizer=request.organizer.slug device=d.id %}"
+                               class="btn btn-default btn-sm">
+                                <span class="fa fa-list-alt"></span>
+                                {% trans "Logs" %}
+                            </a>
                             <a href="{% url "control:organizer.device.edit" organizer=request.organizer.slug device=d.id %}"
                                     class="btn btn-default btn-sm"><i class="fa fa-edit"></i></a>
                         </td>

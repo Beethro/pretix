@@ -159,6 +159,10 @@ last_modified                         datetime                   Last modificati
 
    The ``search`` query parameter has been added.
 
+.. versionchanged:: 3.11
+
+   The ``exclude`` and ``subevent_after`` query parameter has been added.
+
 
 .. _order-position-resource:
 
@@ -485,6 +489,8 @@ List of all orders
        recommend using this in combination with ``testmode=false``, since test mode orders can vanish at any time and
        you will not notice it using this method.
    :query datetime created_since: Only return orders that have been created since the given date.
+   :query datetime subevent_after: Only return orders that contain a ticket for a subevent taking place after the given date.
+   :query string exclude: Exclude a field from the output, e.g. ``fees`` or ``positions.downloads``. Can be used as a performance optimization. Can be passed multiple times.
    :param organizer: The ``slug`` field of the organizer to fetch
    :param event: The ``slug`` field of the event to fetch
    :resheader X-Page-Generated: The server time at the beginning of the operation. If you're using this API to fetch
@@ -928,7 +934,8 @@ Creating orders
         during order generation and is not respected automatically when the order changes later.)
 
    * ``force`` (optional). If set to ``true``, quotas will be ignored.
-   * ``send_mail`` (optional). If set to ``true``, the same emails will be sent as for a regular order. Defaults to
+   * ``send_mail`` (optional). If set to ``true``, the same emails will be sent as for a regular order, regardless of
+     whether these emails are enabled for certain sales channels. Defaults to
      ``false``.
 
    If you want to use add-on products, you need to set the ``positionid`` fields of all positions manually

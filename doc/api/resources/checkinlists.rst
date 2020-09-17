@@ -56,6 +56,10 @@ rules                                 object                     Custom check-in
     The ``subevent`` attribute may now be ``null`` inside event series. The ``allow_multiple_entries``,
     ``allow_entry_after_exit``, and ``rules`` attributes have been added.
 
+.. versionchanged:: 3.11
+
+    The ``subevent_match`` and ``exclude`` query parameters have been added.
+
 Endpoints
 ---------
 
@@ -109,6 +113,8 @@ Endpoints
 
    :query integer page: The page number in case of a multi-page result set, default is 1
    :query integer subevent: Only return check-in lists of the sub-event with the given ID
+   :query integer subevent_match: Only return check-in lists that are valid for the sub-event with the given ID (i.e. also lists valid for all subevents)
+   :query string exclude: Exclude a field from the output, e.g. ``checkin_count``. Can be used as a performance optimization. Can be passed multiple times.
    :param organizer: The ``slug`` field of the organizer to fetch
    :param event: The ``slug`` field of the event to fetch
    :statuscode 200: no error
@@ -602,6 +608,7 @@ Order position endpoints
    :<json datetime datetime: Specifies the datetime of the check-in. If not supplied, the current time will be used.
    :<json boolean force: Specifies that the check-in should succeed regardless of previous check-ins or required
                          questions that have not been filled. Defaults to ``false``.
+   :<json string type: Send ``"exit"`` for an exit and ``"entry"`` (default) for an entry.
    :<json boolean ignore_unpaid: Specifies that the check-in should succeed even if the order is in pending state.
                                  Defaults to ``false`` and only works when ``include_pending`` is set on the check-in
                                  list.

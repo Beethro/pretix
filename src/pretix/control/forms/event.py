@@ -518,7 +518,6 @@ class EventSettingsForm(SettingsForm):
         'attendee_company_required',
         'attendee_addresses_asked',
         'attendee_addresses_required',
-        'confirm_text',
         'banner_text',
         'banner_text_bottom',
         'order_email_asked_twice',
@@ -535,11 +534,6 @@ class EventSettingsForm(SettingsForm):
     def __init__(self, *args, **kwargs):
         self.event = kwargs['obj']
         super().__init__(*args, **kwargs)
-        self.fields['confirm_text'].widget.attrs['rows'] = '3'
-        self.fields['confirm_text'].widget.attrs['placeholder'] = _(
-            'e.g. I hereby confirm that I have read and agree with the event organizer\'s terms of service '
-            'and agree with them.'
-        )
         self.fields['name_scheme'].choices = (
             (k, _('Ask for {fields}, display like {example}').format(
                 fields=' + '.join(str(vv[1]) for vv in v['fields']),
@@ -575,6 +569,9 @@ class CancelSettingsForm(SettingsForm):
         'cancel_allow_user_paid_adjust_fees_explanation',
         'cancel_allow_user_paid_refund_as_giftcard',
         'cancel_allow_user_paid_require_approval',
+        'change_allow_user_variation',
+        'change_allow_user_price',
+        'change_allow_user_until',
     ]
 
     def __init__(self, *args, **kwargs):
@@ -587,9 +584,11 @@ class CancelSettingsForm(SettingsForm):
 
 class PaymentSettingsForm(SettingsForm):
     auto_fields = [
+        'payment_term_mode',
         'payment_term_days',
-        'payment_term_last',
         'payment_term_weekdays',
+        'payment_term_minutes',
+        'payment_term_last',
         'payment_term_expire_automatically',
         'payment_term_accept_late',
         'payment_explanation',
@@ -601,6 +600,18 @@ class PaymentSettingsForm(SettingsForm):
         help_text=_("The tax rule that applies for additional fees you configured for single payment methods. This "
                     "will set the tax rate and reverse charge rules, other settings of the tax rule are ignored.")
     )
+
+    def clean_payment_term_days(self):
+        value = self.cleaned_data.get('payment_term_days')
+        if self.cleaned_data.get('payment_term_mode') == 'days' and value is None:
+            raise ValidationError(_("This field is required."))
+        return value
+
+    def clean_payment_term_minutes(self):
+        value = self.cleaned_data.get('payment_term_minutes')
+        if self.cleaned_data.get('payment_term_mode') == 'minutes' and value is None:
+            raise ValidationError(_("This field is required."))
+        return value
 
     def clean(self):
         data = super().clean()
@@ -674,6 +685,7 @@ class InvoiceSettingsForm(SettingsForm):
         'invoice_numbers_consecutive',
         'invoice_numbers_prefix',
         'invoice_numbers_prefix_cancellations',
+        'invoice_numbers_counter_length',
         'invoice_address_explanation_text',
         'invoice_email_attachment',
         'invoice_address_from_name',
@@ -746,6 +758,11 @@ def multimail_validate(val):
     return s
 
 
+def contains_web_channel_validate(val):
+    if "web" not in val:
+        raise ValidationError(_("The online shop must be selected to receive these emails."))
+
+
 class MailSettingsForm(SettingsForm):
     auto_fields = [
         'mail_prefix',
@@ -753,6 +770,27 @@ class MailSettingsForm(SettingsForm):
         'mail_from_name',
         'mail_attach_ical',
     ]
+
+    mail_sales_channel_placed_paid = forms.MultipleChoiceField(
+        choices=lambda: [(ident, sc.verbose_name) for ident, sc in get_all_sales_channels().items()],
+        label=_('Sales channels for checkout emails'),
+        help_text=_('The order placed and paid emails will only be send to orders from these sales channels. '
+                    'The online shop must be enabled.'),
+        widget=forms.CheckboxSelectMultiple(
+            attrs={'class': 'scrolling-multiple-choice'}
+        ),
+        validators=[contains_web_channel_validate],
+    )
+
+    mail_sales_channel_download_reminder = forms.MultipleChoiceField(
+        choices=lambda: [(ident, sc.verbose_name) for ident, sc in get_all_sales_channels().items()],
+        label=_('Sales channels'),
+        help_text=_('This email will only be send to orders from these sales channels. The online shop must be enabled.'),
+        widget=forms.CheckboxSelectMultiple(
+            attrs={'class': 'scrolling-multiple-choice'}
+        ),
+        validators=[contains_web_channel_validate],
+    )
 
     mail_bcc = forms.CharField(
         label=_("Bcc address"),
@@ -905,6 +943,13 @@ class MailSettingsForm(SettingsForm):
         required=False,
         widget=I18nTextarea,
         help_text=_("This will only be sent out for non-free orders. Free orders will receive the free order "
+                    "template from below instead."),
+    )
+    mail_text_order_approved_free = I18nFormField(
+        label=_("Approved free order"),
+        required=False,
+        widget=I18nTextarea,
+        help_text=_("This will only be sent out for free orders. Non-free orders will receive the non-free order "
                     "template from above instead."),
     )
     mail_text_order_denied = I18nFormField(
@@ -954,6 +999,7 @@ class MailSettingsForm(SettingsForm):
         'mail_text_order_placed_attendee': ['event', 'order', 'position'],
         'mail_text_order_placed_require_approval': ['event', 'order'],
         'mail_text_order_approved': ['event', 'order'],
+        'mail_text_order_approved_free': ['event', 'order'],
         'mail_text_order_denied': ['event', 'order', 'comment'],
         'mail_text_order_paid': ['event', 'order', 'payment_info'],
         'mail_text_order_paid_attendee': ['event', 'order', 'position'],
@@ -1312,3 +1358,25 @@ class ItemMetaPropertyForm(forms.ModelForm):
         widgets = {
             'default': forms.TextInput()
         }
+
+
+class ConfirmTextForm(I18nForm):
+    text = I18nFormField(
+        widget=I18nTextarea,
+        widget_kwargs={'attrs': {'rows': '2'}},
+    )
+
+
+class BaseConfirmTextFormSet(I18nFormSetMixin, forms.BaseFormSet):
+    def __init__(self, *args, **kwargs):
+        event = kwargs.pop('event', None)
+        if event:
+            kwargs['locales'] = event.settings.get('locales')
+        super().__init__(*args, **kwargs)
+
+
+ConfirmTextFormset = formset_factory(
+    ConfirmTextForm,
+    formset=BaseConfirmTextFormSet,
+    can_order=True, can_delete=True, extra=0
+)

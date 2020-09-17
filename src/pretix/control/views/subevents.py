@@ -387,6 +387,7 @@ class SubEventUpdate(EventPermissionRequiredMixin, SubEventEditorMixin, UpdateVi
         if self.is_valid(form):
             r = self.form_valid(form)
             return r
+        messages.error(self.request, _('We could not save your changes. See below for details.'))
         return self.form_invalid(form)
 
     def get_object(self, queryset=None) -> SubEvent:
@@ -660,12 +661,14 @@ class SubEventBulkCreate(SubEventEditorMixin, EventPermissionRequiredMixin, Crea
             initial['rel_presale_start'] = RelativeDateWrapper(RelativeDate(
                 days_before=(i.date_from.astimezone(tz).date() - i.presale_start.astimezone(tz).date()).days,
                 base_date_name='date_from',
-                time=i.presale_start.astimezone(tz).time()
+                time=i.presale_start.astimezone(tz).time(),
+                minutes_before=None
             )) if i.presale_start else None
             initial['rel_presale_end'] = RelativeDateWrapper(RelativeDate(
                 days_before=(i.date_from.astimezone(tz).date() - i.presale_end.astimezone(tz).date()).days,
                 base_date_name='date_from',
-                time=i.presale_end.astimezone(tz).time()
+                time=i.presale_end.astimezone(tz).time(),
+                minutes_before=None
             )) if i.presale_end else None
         else:
             kwargs['instance'] = SubEvent(event=self.request.event)
@@ -798,7 +801,7 @@ class SubEventBulkCreate(SubEventEditorMixin, EventPermissionRequiredMixin, Crea
         to_save_items = []
         to_save_variations = []
         for f in self.formset.forms:
-            if self.formset._should_delete_form(f):
+            if self.formset._should_delete_form(f) or not f.has_changed():
                 continue
 
             change_data = {k: f.cleaned_data.get(k) for k in f.changed_data}
@@ -832,7 +835,7 @@ class SubEventBulkCreate(SubEventEditorMixin, EventPermissionRequiredMixin, Crea
 
         to_save_products = []
         for f in self.cl_formset.forms:
-            if self.cl_formset._should_delete_form(f):
+            if self.cl_formset._should_delete_form(f) or not f.has_changed():
                 continue
             change_data = {k: f.cleaned_data.get(k) for k in f.changed_data}
             for se in subevents:
@@ -860,7 +863,6 @@ class SubEventBulkCreate(SubEventEditorMixin, EventPermissionRequiredMixin, Crea
 
         self.request.event.cache.clear()
         messages.success(self.request, pgettext_lazy('subevent', '{} new dates have been created.').format(len(subevents)))
-        return self.get(self.request, *self.args, **self.kwargs)
         return redirect(reverse('control:event.subevents', kwargs={
             'organizer': self.request.event.organizer.slug,
             'event': self.request.event.slug,
@@ -873,4 +875,5 @@ class SubEventBulkCreate(SubEventEditorMixin, EventPermissionRequiredMixin, Crea
         if self.is_valid(form):
             return self.form_valid(form)
 
+        messages.error(self.request, _('We could not save your changes. See below for details.'))
         return self.form_invalid(form)

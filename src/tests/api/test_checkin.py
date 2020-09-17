@@ -89,6 +89,13 @@ TEST_ORDERPOSITION1_RES = {
     "checkins": [],
     "downloads": [],
     "answers": [],
+    "seat": None,
+    "company": None,
+    "street": None,
+    "zipcode": None,
+    "city": None,
+    "country": None,
+    "state": None,
     "subevent": None,
     "pseudonymization_id": "ABCDEFGHKL",
 }
@@ -114,6 +121,13 @@ TEST_ORDERPOSITION2_RES = {
     "checkins": [],
     "downloads": [],
     "answers": [],
+    "seat": None,
+    "company": None,
+    "street": None,
+    "zipcode": None,
+    "city": None,
+    "country": None,
+    "state": None,
     "subevent": None,
     "pseudonymization_id": "BACDEFGHKL",
 }
@@ -162,11 +176,25 @@ def test_list_list(token_client, organizer, event, clist, item, subevent):
     resp = token_client.get(
         '/api/v1/organizers/{}/events/{}/checkinlists/?subevent={}'.format(organizer.slug, event.slug, subevent.pk))
     assert [res] == resp.data['results']
+    resp = token_client.get(
+        '/api/v1/organizers/{}/events/{}/checkinlists/?subevent_match={}'.format(organizer.slug, event.slug, subevent.pk))
+    assert [res] == resp.data['results']
     with scopes_disabled():
         se2 = event.subevents.create(name="Foobar", date_from=datetime.datetime(2017, 12, 27, 10, 0, 0, tzinfo=UTC))
     resp = token_client.get(
         '/api/v1/organizers/{}/events/{}/checkinlists/?subevent={}'.format(organizer.slug, event.slug, se2.pk))
     assert [] == resp.data['results']
+    resp = token_client.get(
+        '/api/v1/organizers/{}/events/{}/checkinlists/?subevent_match={}'.format(organizer.slug, event.slug, se2.pk))
+    assert [] == resp.data['results']
+
+    clist.subevent = None
+    clist.save()
+    res["subevent"] = None
+
+    resp = token_client.get(
+        '/api/v1/organizers/{}/events/{}/checkinlists/?subevent_match={}'.format(organizer.slug, event.slug, se2.pk))
+    assert [res] == resp.data['results']
 
 
 @pytest.mark.django_db
@@ -716,6 +744,20 @@ def test_forced_multiple(token_client, organizer, clist, event, order):
     ), {'force': True}, format='json')
     assert resp.status_code == 201
     assert resp.data['status'] == 'ok'
+
+
+@pytest.mark.django_db
+def test_require_product(token_client, organizer, clist, event, order):
+    with scopes_disabled():
+        clist.limit_products.clear()
+        p = order.positions.first()
+
+    resp = token_client.post('/api/v1/organizers/{}/events/{}/checkinlists/{}/positions/{}/redeem/'.format(
+        organizer.slug, event.slug, clist.pk, p.pk
+    ), {}, format='json')
+    assert resp.status_code == 400
+    assert resp.data['status'] == 'error'
+    assert resp.data['reason'] == 'product'
 
 
 @pytest.mark.django_db

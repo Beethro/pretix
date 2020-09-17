@@ -2223,6 +2223,158 @@ class CartAddonTest(CartTestMixin, TestCase):
         self.cm.commit()
 
     @classscope(attr='orga')
+    def test_multi_allowed(self):
+        cp1 = CartPosition.objects.create(
+            expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
+            event=self.event, cart_id=self.session_key
+        )
+        self.addon1.max_count = 2
+        self.addon1.multi_allowed = True
+        self.addon1.save()
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk
+            },
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3b.pk
+            }
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 2
+
+    @classscope(attr='orga')
+    def test_number_exceeds_max(self):
+        cp1 = CartPosition.objects.create(
+            expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
+            event=self.event, cart_id=self.session_key
+        )
+        self.addon1.max_count = 2
+        self.addon1.multi_allowed = True
+        self.addon1.save()
+        with self.assertRaises(CartError):
+            self.cm.set_addons([
+                {
+                    'addon_to': cp1.pk,
+                    'item': self.workshop3.pk,
+                    'variation': self.workshop3a.pk,
+                    'count': 3,
+                },
+            ])
+            self.cm.commit()
+        assert cp1.addons.count() == 0
+
+    @classscope(attr='orga')
+    def test_number_exceeds_quota(self):
+        self.workshopquota.size = 1
+        self.workshopquota.save()
+        cp1 = CartPosition.objects.create(
+            expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
+            event=self.event, cart_id=self.session_key
+        )
+        self.addon1.max_count = 2
+        self.addon1.multi_allowed = True
+        self.addon1.save()
+        with self.assertRaises(CartError):
+            self.cm.set_addons([
+                {
+                    'addon_to': cp1.pk,
+                    'item': self.workshop3.pk,
+                    'variation': self.workshop3a.pk,
+                    'count': 2,
+                },
+            ])
+            self.cm.commit()
+        assert cp1.addons.count() == 1
+
+    @classscope(attr='orga')
+    def test_free_price(self):
+        self.workshop3.free_price = True
+        self.workshop3.save()
+        cp1 = CartPosition.objects.create(
+            expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
+            event=self.event, cart_id=self.session_key
+        )
+        self.addon1.max_count = 5
+        self.addon1.multi_allowed = True
+        self.addon1.save()
+
+        self.cm = CartManager(event=self.event, cart_id=self.session_key)
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk,
+                'count': 3,
+                'price': '24.00'
+            },
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 3
+        assert all(a.price == Decimal('24.00') for a in cp1.addons.all())
+
+        self.cm = CartManager(event=self.event, cart_id=self.session_key)
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk,
+                'count': 3,
+                'price': '5.00'
+            },
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 3
+        assert all(a.price == Decimal('12.00') for a in cp1.addons.all())
+
+    @classscope(attr='orga')
+    def test_change_number(self):
+        cp1 = CartPosition.objects.create(
+            expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
+            event=self.event, cart_id=self.session_key
+        )
+        self.addon1.max_count = 5
+        self.addon1.multi_allowed = True
+        self.addon1.save()
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk,
+                'count': 3,
+            },
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 3
+
+        self.cm = CartManager(event=self.event, cart_id=self.session_key)
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk,
+                'count': 4,
+            },
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 4
+
+        self.cm = CartManager(event=self.event, cart_id=self.session_key)
+        self.cm.set_addons([
+            {
+                'addon_to': cp1.pk,
+                'item': self.workshop3.pk,
+                'variation': self.workshop3a.pk,
+                'count': 2,
+            },
+        ])
+        self.cm.commit()
+        assert cp1.addons.count() == 2
+
+    @classscope(attr='orga')
     def test_no_duplicate_items_for_same_cp(self):
         cp1 = CartPosition.objects.create(
             expires=now() + timedelta(minutes=10), item=self.ticket, price=Decimal('23.00'),
@@ -2558,6 +2710,27 @@ class CartBundleTest(CartTestMixin, TestCase):
             {
                 'item': self.ticket.pk,
                 'variation': None,
+                'count': 1
+            }
+        ])
+        self.cm.commit()
+        cp = CartPosition.objects.get(addon_to__isnull=True)
+        assert cp.item == self.ticket
+        assert cp.price == 23 - 1.5
+        assert cp.addons.count() == 1
+        a = cp.addons.get()
+        assert a.item == self.trans
+        assert a.price == 1.5
+
+    @classscope(attr='orga')
+    def test_simple_bundle_main_enforce_free_price_minimum(self):
+        self.ticket.free_price = True
+        self.ticket.save()
+        self.cm.add_new_items([
+            {
+                'item': self.ticket.pk,
+                'variation': None,
+                'price': '21.50',
                 'count': 1
             }
         ])
@@ -3414,9 +3587,9 @@ class CartSeatingTest(CartTestMixin, TestCase):
         self.event.seat_category_mappings.create(
             layout_category='Stalls', product=self.ticket
         )
-        self.seat_a1 = self.event.seats.create(name="A1", product=self.ticket, seat_guid="A1")
-        self.seat_a2 = self.event.seats.create(name="A2", product=self.ticket, seat_guid="A2")
-        self.seat_a3 = self.event.seats.create(name="A3", product=self.ticket, seat_guid="A3")
+        self.seat_a1 = self.event.seats.create(seat_number="A1", product=self.ticket, seat_guid="A1")
+        self.seat_a2 = self.event.seats.create(seat_number="A2", product=self.ticket, seat_guid="A2")
+        self.seat_a3 = self.event.seats.create(seat_number="A3", product=self.ticket, seat_guid="A3")
         self.cm = CartManager(event=self.event, cart_id=self.session_key)
 
     def test_add_with_seat_without_variation(self):
@@ -3476,7 +3649,7 @@ class CartSeatingTest(CartTestMixin, TestCase):
         with scopes_disabled():
             v = self.event.vouchers.create(item=self.ticket, seat=self.seat_a1)
         self.client.post('/%s/%s/cart/add' % (self.orga.slug, self.event.slug), {
-            'seat_%d' % self.ticket.id: self.seat_a1,
+            'seat_%d' % self.ticket.id: self.seat_a1.seat_guid,
             '_voucher_code': v.code,
         }, follow=True)
         with scopes_disabled():
@@ -3489,7 +3662,7 @@ class CartSeatingTest(CartTestMixin, TestCase):
         with scopes_disabled():
             v = self.event.vouchers.create(item=self.ticket, seat=self.seat_a1)
         self.client.post('/%s/%s/cart/add' % (self.orga.slug, self.event.slug), {
-            'seat_%d' % self.ticket.id: self.seat_a2,
+            'seat_%d' % self.ticket.id: self.seat_a2.seat_guid,
             '_voucher_code': v.code,
         }, follow=True)
         with scopes_disabled():
@@ -3507,6 +3680,25 @@ class CartSeatingTest(CartTestMixin, TestCase):
     def test_add_seat_required(self):
         self.client.post('/%s/%s/cart/add' % (self.orga.slug, self.event.slug), {
             'item_%d' % self.ticket.id: '1',
+        }, follow=True)
+        with scopes_disabled():
+            objs = list(CartPosition.objects.filter(cart_id=self.session_key, event=self.event))
+            self.assertEqual(len(objs), 0)
+
+    def test_add_seat_not_required_if_no_choice(self):
+        self.event.settings.seating_choice = False
+        self.client.post('/%s/%s/cart/add' % (self.orga.slug, self.event.slug), {
+            'item_%d' % self.ticket.id: '1',
+        }, follow=True)
+        with scopes_disabled():
+            objs = list(CartPosition.objects.filter(cart_id=self.session_key, event=self.event))
+            self.assertEqual(len(objs), 1)
+            assert objs[0].seat is None
+
+    def test_seat_not_allowed_if_no_choice(self):
+        self.event.settings.seating_choice = False
+        self.client.post('/%s/%s/cart/add' % (self.orga.slug, self.event.slug), {
+            'seat_%d' % self.ticket.id: self.seat_a2.seat_guid,
         }, follow=True)
         with scopes_disabled():
             objs = list(CartPosition.objects.filter(cart_id=self.session_key, event=self.event))

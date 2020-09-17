@@ -1,5 +1,6 @@
 import datetime
 import sys
+import time
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -964,7 +965,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.op2.subevent = se2
         self.op2.save()
         self.event.settings.set('payment_term_last', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
 
         self.order.status = Order.STATUS_EXPIRED
@@ -1104,7 +1105,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.op2.subevent = se2
         self.op2.save()
         self.event.settings.set('last_order_modification_date', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
         assert self.order.can_modify_answers
         self.op2.subevent = se3
@@ -1120,7 +1121,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.event.date_from = datetime.datetime(2017, 5, 3, 12, 0, 0, tzinfo=pytz.UTC)
         self.event.save()
         self.event.settings.set('payment_term_last', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
         assert self.order.payment_term_last == datetime.datetime(2017, 5, 1, 23, 59, 59, tzinfo=pytz.UTC)
 
@@ -1136,7 +1137,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.op2.subevent = se2
         self.op2.save()
         self.event.settings.set('payment_term_last', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
         assert self.order.payment_term_last > now()
         self.op2.subevent = se3
@@ -1152,7 +1153,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.event.date_from = datetime.datetime(2017, 5, 3, 12, 0, 0, tzinfo=pytz.UTC)
         self.event.save()
         self.event.settings.set('ticket_download_date', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
         assert self.order.ticket_download_date == datetime.datetime(2017, 5, 1, 12, 0, 0, tzinfo=pytz.UTC)
 
@@ -1168,7 +1169,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.op2.subevent = se2
         self.op2.save()
         self.event.settings.set('ticket_download_date', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=None, base_date_name='date_from')
+            RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
         ))
         assert self.order.ticket_download_date > now()
         self.op2.subevent = se3
@@ -1307,54 +1308,13 @@ class OrderTestCase(BaseQuotaTestCase):
 
         assert self.order.user_cancel_deadline is None
         self.event.settings.set('cancel_allow_user_until', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from')
+            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
         ))
         self.order = Order.objects.get(pk=self.order.pk)
         assert self.order.user_cancel_deadline > now()
         assert self.order.user_cancel_allowed
         self.event.settings.set('cancel_allow_user_until', RelativeDateWrapper(
-            RelativeDate(days_before=4, time=datetime.time(14, 0, 0), base_date_name='date_from')
-        ))
-        self.order = Order.objects.get(pk=self.order.pk)
-        assert self.order.user_cancel_deadline < now()
-        assert not self.order.user_cancel_allowed
-
-    @classscope(attr='o')
-    def test_user_cancel_absolute_deadline_paid_no_subevents(self):
-        self.order.status = Order.STATUS_PAID
-        self.order.save()
-        self.event.settings.cancel_allow_user_paid = True
-        assert self.order.user_cancel_deadline is None
-        self.event.settings.set('cancel_allow_user_paid_until', RelativeDateWrapper(
-            now() + timedelta(days=1)
-        ))
-        self.order = Order.objects.get(pk=self.order.pk)
-        assert self.order.user_cancel_allowed
-        assert self.order.user_cancel_deadline > now()
-        self.event.settings.set('cancel_allow_user_paid_until', RelativeDateWrapper(
-            now() - timedelta(days=1)
-        ))
-        self.order = Order.objects.get(pk=self.order.pk)
-        assert self.order.user_cancel_deadline < now()
-        assert not self.order.user_cancel_allowed
-
-    @classscope(attr='o')
-    def test_user_cancel_relative_deadline_paid_no_subevents(self):
-        self.order.status = Order.STATUS_PAID
-        self.order.save()
-        self.event.date_from = now() + timedelta(days=3)
-        self.event.save()
-        self.event.settings.cancel_allow_user_paid = True
-
-        assert self.order.user_cancel_deadline is None
-        self.event.settings.set('cancel_allow_user_paid_until', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from')
-        ))
-        self.order = Order.objects.get(pk=self.order.pk)
-        assert self.order.user_cancel_deadline > now()
-        assert self.order.user_cancel_allowed
-        self.event.settings.set('cancel_allow_user_paid_until', RelativeDateWrapper(
-            RelativeDate(days_before=4, time=datetime.time(14, 0, 0), base_date_name='date_from')
+            RelativeDate(days_before=4, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
         ))
         self.order = Order.objects.get(pk=self.order.pk)
         assert self.order.user_cancel_deadline < now()
@@ -1373,7 +1333,7 @@ class OrderTestCase(BaseQuotaTestCase):
         self.op2.save()
 
         self.event.settings.set('cancel_allow_user_until', RelativeDateWrapper(
-            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from')
+            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
         ))
         self.order = Order.objects.get(pk=self.order.pk)
         assert self.order.user_cancel_deadline < now()
@@ -1594,6 +1554,186 @@ class OrderTestCase(BaseQuotaTestCase):
             p1: Decimal('23.00'),
             p2: Decimal('10.00'),
         }
+
+    @classscope(attr='o')
+    def test_can_change_order(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v = item1.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=v, price=23)
+        assert not self.order.user_change_allowed
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed
+
+        self.event.settings.change_allow_user_variation = False
+        self.order.require_approval = True
+        assert not self.order.user_change_allowed
+        self.event.settings.change_allow_user_variation = True
+        assert not self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_can_change_order_with_giftcard(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True, issue_giftcard=True)
+        v = item1.variations.create(value="V")
+        p = OrderPosition.objects.create(order=self.order, item=item1,
+                                         variation=v, price=23)
+        self.event.settings.change_allow_user_variation = True
+        self.event.organizer.issued_gift_cards.create(
+            currency="EUR", issued_in=p
+        )
+        assert not self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_can_change_checked_in(self):
+        v = self.item1.variations.create(value="V")
+        self.order.positions.update(variation=v)
+        self.order.status = Order.STATUS_PAID
+        self.order.save()
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed
+        Checkin.objects.create(
+            position=self.order.positions.first(),
+            list=CheckinList.objects.create(event=self.event, name='Default')
+        )
+        assert not self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_can_change_order_multiple(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v = item1.variations.create(value="V")
+        item2 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v2 = item2.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=v, price=23)
+        OrderPosition.objects.create(order=self.order, item=item2,
+                                     variation=v2, price=23)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_can_not_change_order(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=False)
+        v = item1.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=v, price=23)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed is False
+
+    @classscope(attr='o')
+    def test_require_any_variation(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=None, price=23)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed is False
+        item2 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v2 = item2.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item2,
+                                     variation=v2, price=23)
+        assert self.order.user_change_allowed is True
+
+    @classscope(attr='o')
+    def test_can_not_change_order_multiple(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=False)
+        item2 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v = item1.variations.create(value="V")
+        v2 = item2.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=v, price=23)
+        OrderPosition.objects.create(order=self.order, item=item2,
+                                     variation=v2, price=23)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed is False
+
+    @classscope(attr='o')
+    def test_can_not_change_order_multiple_mixed(self):
+        item1 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=False)
+        item2 = Item.objects.create(event=self.event, name="Ticket", default_price=23,
+                                    admission=True, allow_cancel=True)
+        v = item1.variations.create(value="V")
+        v2 = item2.variations.create(value="V")
+        OrderPosition.objects.create(order=self.order, item=item1,
+                                     variation=v, price=23)
+        OrderPosition.objects.create(order=self.order, item=item2,
+                                     variation=v2, price=23)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_allowed is False
+
+    @classscope(attr='o')
+    def test_user_change_absolute_deadline_unpaid_no_subevents(self):
+        v = self.item1.variations.create(value="V")
+        self.order.positions.update(variation=v)
+        self.event.settings.change_allow_user_variation = True
+        assert self.order.user_change_deadline is None
+        self.event.settings.set('change_allow_user_until', RelativeDateWrapper(
+            now() + timedelta(days=1)
+        ))
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline > now()
+        assert self.order.user_change_allowed
+        self.event.settings.set('change_allow_user_until', RelativeDateWrapper(
+            now() - timedelta(days=1)
+        ))
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline < now()
+        assert not self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_user_change_relative_deadline_unpaid_no_subevents(self):
+        v = self.item1.variations.create(value="V")
+        self.order.positions.update(variation=v)
+        self.event.settings.change_allow_user_variation = True
+        self.event.date_from = now() + timedelta(days=3)
+        self.event.save()
+
+        assert self.order.user_change_deadline is None
+        self.event.settings.set('change_allow_user_until', RelativeDateWrapper(
+            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
+        ))
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline > now()
+        assert self.order.user_change_allowed
+        self.event.settings.set('change_allow_user_until', RelativeDateWrapper(
+            RelativeDate(days_before=4, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
+        ))
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline < now()
+        assert not self.order.user_change_allowed
+
+    @classscope(attr='o')
+    def test_user_change_relative_deadline_to_subevents(self):
+        v = self.item1.variations.create(value="V")
+        self.order.positions.update(variation=v)
+        self.event.settings.change_allow_user_variation = True
+        self.event.date_from = now() + timedelta(days=3)
+        self.event.has_subevents = True
+        self.event.save()
+        se1 = self.event.subevents.create(name="SE1", date_from=now() + timedelta(days=10))
+        se2 = self.event.subevents.create(name="SE2", date_from=now() + timedelta(days=1))
+        self.op1.subevent = se1
+        self.op1.save()
+        self.op2.subevent = se2
+        self.op2.save()
+
+        self.event.settings.set('change_allow_user_until', RelativeDateWrapper(
+            RelativeDate(days_before=2, time=datetime.time(14, 0, 0), base_date_name='date_from', minutes_before=None)
+        ))
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline < now()
+        self.op2.subevent = se1
+        self.op2.save()
+        self.order = Order.objects.get(pk=self.order.pk)
+        assert self.order.user_change_deadline > now()
 
 
 class ItemCategoryTest(TestCase):
@@ -2145,8 +2285,8 @@ class SeatingTestCase(TestCase):
             self.event.seat_category_mappings.create(
                 layout_category='Stalls', product=self.ticket
             )
-            self.seat_a1 = self.event.seats.create(name="A1", product=self.ticket, blocked=False, x=0, y=0)
-            self.seat_a2 = self.event.seats.create(name="A2", product=self.ticket, blocked=False, x=1, y=1)
+            self.seat_a1 = self.event.seats.create(seat_number="A1", product=self.ticket, blocked=False, x=0, y=0)
+            self.seat_a2 = self.event.seats.create(seat_number="A2", product=self.ticket, blocked=False, x=1, y=1)
 
     @classscope(attr='organizer')
     def test_free(self):
@@ -2427,3 +2567,38 @@ def test_question_answer_validation_multiple_choice():
             assert q.clean_answer([o1.pk, o3.pk + 1000]) == [o1]
         with pytest.raises(ValidationError):
             assert q.clean_answer([o1.pk, 'FOO']) == [o1]
+
+
+@pytest.mark.django_db
+def test_subevent_date_updates_order_date():
+    # When the date of a subevent changes, all orders need to get a bumped modification date to hold
+    # a required invariant of the libpretixsync synchronization approach.
+    organizer = Organizer.objects.create(name='Dummy', slug='dummy')
+    with scope(organizer=organizer):
+        event = Event.objects.create(
+            organizer=organizer, name='Dummy', slug='dummy',
+            date_from=now(), date_to=now() - timedelta(hours=1), has_subevents=True
+        )
+        item1 = Item.objects.create(event=event, name="Ticket", default_price=23, admission=True)
+        se1 = event.subevents.create(date_from=now(), name="SE 1")
+        se2 = event.subevents.create(date_from=now(), name="SE 2")
+
+        order1 = Order.objects.create(event=event, status=Order.STATUS_PAID, expires=now() + timedelta(days=3), total=6)
+        OrderPosition.objects.create(order=order1, item=item1, subevent=se1, price=2)
+        order2 = Order.objects.create(event=event, status=Order.STATUS_PAID, expires=now() + timedelta(days=3), total=6)
+        OrderPosition.objects.create(order=order2, item=item1, subevent=se2, price=2)
+
+        o1lm = order1.last_modified
+        o2lm = order2.last_modified
+
+        time.sleep(1)
+        se1.date_from += timedelta(days=2)
+        se1.save()
+        se2.name = "foo"
+        se2.save()
+
+        order1.refresh_from_db()
+        order2.refresh_from_db()
+
+        assert order1.last_modified > o1lm
+        assert order2.last_modified == o2lm

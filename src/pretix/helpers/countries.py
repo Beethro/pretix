@@ -33,11 +33,20 @@ class CachedCountries(Countries):
 class FastCountryField(CountryField):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("countries", CachedCountries)
+
+        if "max_length" not in kwargs:
+            # Override logic from CountryField to include 20% buffer. We don't want to migrate our database
+            # every time a new country is added to the system!
+            if kwargs.get("multiple", False):
+                kwargs["max_length"] = int(len(kwargs['countries']()) * 3 * 1.2)
+            else:
+                kwargs["max_length"] = 2
+
         super().__init__(*args, **kwargs)
 
     def check(self, **kwargs):
         # Disable _check_choices since it would require sorting all country names at every import of this field,
-        # which taskes 1-2 seconds
+        # which takes 1-2 seconds
         return [
             *self._check_field_name(),
             # *self._check_choices(),

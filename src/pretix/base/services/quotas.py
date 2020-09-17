@@ -1,9 +1,10 @@
 import sys
 from collections import Counter, defaultdict
 from datetime import timedelta
+from itertools import zip_longest
 
 from django.conf import settings
-from django.db import models
+from django.db import OperationalError, models
 from django.db.models import (
     Case, Count, F, Func, Max, OuterRef, Q, Subquery, Sum, Value, When,
 )
@@ -17,6 +18,7 @@ from pretix.base.models import (
 )
 from pretix.celery_app import app
 
+from ...helpers.periodic import minimum_interval
 from ..signals import periodic_task, quota_availability
 
 
@@ -89,7 +91,7 @@ class QuotaAvailability:
 
     def compute(self, now_dt=None):
         now_dt = now_dt or now()
-        quotas = list(self._queue)
+        quotas = list(set(self._queue))
         quotas_original = list(self._queue)
         self._queue.clear()
         if not quotas:
@@ -103,7 +105,12 @@ class QuotaAvailability:
                 self.results[q] = resp
 
         self._close(quotas)
-        self._write_cache(quotas, now_dt)
+        try:
+            self._write_cache(quotas, now_dt)
+        except OperationalError as e:
+            # Ignore deadlocks when multiple threads try to write to the cache
+            if 'deadlock' not in str(e).lower():
+                raise e
 
     def _write_cache(self, quotas, now_dt):
         events = {q.event for q in quotas}
@@ -261,15 +268,15 @@ class QuotaAvailability:
                 qs = self._item_to_quotas[line['item_id']]
             for q in qs:
                 if q.subevent_id == line['subevent_id']:
+                    if line['order__status'] == Order.STATUS_PAID:
+                        self.count_paid_orders[q] += line['c']
+                        q.cached_availability_paid_orders = self.count_paid_orders[q]
+                    elif line['order__status'] == Order.STATUS_PENDING:
+                        self.count_pending_orders[q] += line['c']
                     if q.release_after_exit and line['is_exited']:
                         self.count_exited_orders[q] += line['c']
                     else:
                         size_left[q] -= line['c']
-                        if line['order__status'] == Order.STATUS_PAID:
-                            self.count_paid_orders[q] += line['c']
-                            q.cached_availability_paid_orders = self.count_paid_orders[q]
-                        elif line['order__status'] == Order.STATUS_PENDING:
-                            self.count_pending_orders[q] += line['c']
                         if size_left[q] <= 0 and q not in self.results:
                             if line['order__status'] == Order.STATUS_PAID:
                                 self.results[q] = Quota.AVAILABILITY_GONE, 0
@@ -397,8 +404,16 @@ class QuotaAvailability:
 
 
 @receiver(signal=periodic_task)
+@minimum_interval(minutes_after_success=60)
 def build_all_quota_caches(sender, **kwargs):
-    refresh_quota_caches.apply_async()
+    refresh_quota_caches.apply()
+
+
+def grouper(iterable, n, fillvalue=None):
+    """Collect data into fixed-length chunks or blocks"""
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
+    args = [iter(iterable)] * n
+    return zip_longest(fillvalue=fillvalue, *args)
 
 
 @app.task
@@ -424,5 +439,8 @@ def refresh_quota_caches():
             Q(subevent__date_to__isnull=False, subevent__date_to__gte=now() - timedelta(days=14)) |
             Q(subevent__date_from__gte=now() - timedelta(days=14))
         )
-        for q in quotas:
-            q.availability()
+
+        for qs in grouper(quotas, 100, None):
+            qa = QuotaAvailability(early_out=False)
+            qa.queue(*[q for q in qs if q is not None])
+            qa.compute()

@@ -27,7 +27,7 @@ class CachedFile(models.Model):
     date = models.DateTimeField(null=True, blank=True)
     filename = models.CharField(max_length=255)
     type = models.CharField(max_length=255)
-    file = models.FileField(null=True, blank=True, upload_to=cachedfile_name)
+    file = models.FileField(null=True, blank=True, upload_to=cachedfile_name, max_length=255)
 
 
 @receiver(post_delete, sender=CachedFile)
@@ -48,14 +48,15 @@ class LoggingMixin:
         :param data: Any JSON-serializable object
         :param user: The user performing the action (optional)
         """
-        from .log import LogEntry
-        from .event import Event
-        from .devices import Device
         from pretix.api.models import OAuthAccessToken, OAuthApplication
-        from .organizer import TeamAPIToken
+        from pretix.api.webhooks import get_all_webhook_events, notify_webhooks
+
         from ..notifications import get_all_notification_types
         from ..services.notifications import notify
-        from pretix.api.webhooks import get_all_webhook_events, notify_webhooks
+        from .devices import Device
+        from .event import Event
+        from .log import LogEntry
+        from .organizer import TeamAPIToken
 
         event = None
         if isinstance(self, Event):

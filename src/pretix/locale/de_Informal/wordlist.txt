@@ -110,6 +110,7 @@ innenname
 innennamen
 Installations
 integrationen
+INV
 invalidiert
 iOS
 iTunes
@@ -120,6 +121,7 @@ Key
 Kombitickets
 Kompatibilitätsmodus
 Konfigurations
+Kosovo
 landesspezifische
 Lead
 Leaflet
@@ -184,6 +186,7 @@ SCA
 Scan
 Scanergebnis
 Scanning
+Scans
 schiefgeht
 sechsstelligen
 Secret
@@ -237,6 +240,7 @@ unterzahlt
 UNTERZAHLT
 unzugeordnete
 unzugeordneten
+umzubuchen
 URIs
 Ursprüngl
 USt

@@ -209,7 +209,7 @@ class Order(LockModel, LoggedModel):
         return self.full_code
 
     def gracefully_delete(self, user=None, auth=None):
-        from . import Voucher, GiftCard, GiftCardTransaction
+        from . import GiftCard, GiftCardTransaction, Voucher
 
         if not self.testmode:
             raise TypeError("Only test mode orders can be deleted.")
@@ -392,13 +392,19 @@ class Order(LockModel, LoggedModel):
     def set_expires(self, now_dt=None, subevents=None):
         now_dt = now_dt or now()
         tz = pytz.timezone(self.event.settings.timezone)
-        exp_by_date = now_dt.astimezone(tz) + timedelta(days=self.event.settings.get('payment_term_days', as_type=int))
-        exp_by_date = exp_by_date.astimezone(tz).replace(hour=23, minute=59, second=59, microsecond=0)
-        if self.event.settings.get('payment_term_weekdays'):
-            if exp_by_date.weekday() == 5:
-                exp_by_date += timedelta(days=2)
-            elif exp_by_date.weekday() == 6:
-                exp_by_date += timedelta(days=1)
+        mode = self.event.settings.get('payment_term_mode')
+        if mode == 'days':
+            exp_by_date = now_dt.astimezone(tz) + timedelta(days=self.event.settings.get('payment_term_days', as_type=int))
+            exp_by_date = exp_by_date.astimezone(tz).replace(hour=23, minute=59, second=59, microsecond=0)
+            if self.event.settings.get('payment_term_weekdays'):
+                if exp_by_date.weekday() == 5:
+                    exp_by_date += timedelta(days=2)
+                elif exp_by_date.weekday() == 6:
+                    exp_by_date += timedelta(days=1)
+        elif mode == 'minutes':
+            exp_by_date = now_dt.astimezone(tz) + timedelta(minutes=self.event.settings.get('payment_term_minutes', as_type=int))
+        else:
+            raise ValueError("'payment_term_mode' has an invalid value '{}'.".format(mode))
 
         self.expires = exp_by_date
 
@@ -435,6 +441,19 @@ class Order(LockModel, LoggedModel):
         )
 
     @cached_property
+    def user_change_deadline(self):
+        until = self.event.settings.get('change_allow_user_until', as_type=RelativeDateWrapper)
+        if until:
+            if self.event.has_subevents:
+                terms = [
+                    until.datetime(se)
+                    for se in self.event.subevents.filter(id__in=self.positions.values_list('subevent', flat=True))
+                ]
+                return min(terms) if terms else None
+            else:
+                return until.datetime(self.event)
+
+    @cached_property
     def user_cancel_deadline(self):
         if self.status == Order.STATUS_PAID and self.total != Decimal('0.00'):
             until = self.event.settings.get('cancel_allow_user_paid_until', as_type=RelativeDateWrapper)
@@ -468,13 +487,47 @@ class Order(LockModel, LoggedModel):
 
     @property
     @scopes_disabled()
+    def user_change_allowed(self) -> bool:
+        """
+        Returns whether or not this order can be canceled by the user.
+        """
+        from .checkin import Checkin
+
+        if self.status not in (Order.STATUS_PENDING, Order.STATUS_PAID) or not self.count_positions:
+            return False
+
+        if self.cancellation_requests.exists():
+            return False
+
+        if self.require_approval:
+            return False
+
+        positions = list(
+            self.positions.all().annotate(
+                has_variations=Exists(ItemVariation.objects.filter(item_id=OuterRef('item_id'))),
+                has_checkin=Exists(Checkin.objects.filter(position_id=OuterRef('pk')))
+            ).select_related('item').prefetch_related('issued_gift_cards')
+        )
+        cancelable = all([op.item.allow_cancel and not op.has_checkin for op in positions])
+        if not cancelable or not positions:
+            return False
+        for op in positions:
+            if op.issued_gift_cards.all():
+                return False
+        if self.user_change_deadline and now() > self.user_change_deadline:
+            return False
+
+        return self.event.settings.change_allow_user_variation and any([op.has_variations for op in positions])
+
+    @property
+    @scopes_disabled()
     def user_cancel_allowed(self) -> bool:
         """
         Returns whether or not this order can be canceled by the user.
         """
         from .checkin import Checkin
 
-        if self.cancellation_requests.exists():
+        if self.cancellation_requests.exists() or not self.cancel_allowed():
             return False
         positions = list(
             self.positions.all().annotate(
@@ -795,7 +848,9 @@ class Order(LockModel, LoggedModel):
                          only be attached for this position and child positions, the link will only point to the
                          position and the attendee email will be used if available.
         """
-        from pretix.base.services.mail import SendMailException, mail, render_mail, TolerantDict
+        from pretix.base.services.mail import (
+            SendMailException, TolerantDict, mail, render_mail,
+        )
 
         if not self.email:
             return
@@ -1378,7 +1433,9 @@ class OrderPayment(models.Model):
         :type mail_text: str
         :raises Quota.QuotaExceededException: if the quota is exceeded and ``force`` is ``False``
         """
-        from pretix.base.services.invoices import generate_invoice, invoice_qualified
+        from pretix.base.services.invoices import (
+            generate_invoice, invoice_qualified,
+        )
 
         with transaction.atomic():
             locked_instance = OrderPayment.objects.select_for_update().get(pk=self.pk)
@@ -1448,7 +1505,7 @@ class OrderPayment(models.Model):
                     trigger_pdf=not send_mail or not self.order.event.settings.invoice_email_attachment
                 )
 
-        if send_mail:
+        if send_mail and self.order.sales_channel in self.order.event.settings.mail_sales_channel_placed_paid:
             self._send_paid_mail(invoice, user, mail_text)
             if self.order.event.settings.mail_send_order_paid_attendee:
                 for p in self.order.positions.all():
@@ -1822,6 +1879,9 @@ class OrderFee(models.Model):
             self.tax_rate = Decimal('0.00')
 
     def save(self, *args, **kwargs):
+        if self.tax_rule and not self.tax_rule.rate and not self.tax_rule.pk:
+            self.tax_rule = None
+
         if self.tax_rate is None:
             self._calculate_tax()
         self.order.touch()
@@ -2023,7 +2083,9 @@ class OrderPosition(AbstractPosition):
         :param sender: Custom email sender.
         :param attach_tickets: Attach tickets of this order, if they are existing and ready to download
         """
-        from pretix.base.services.mail import SendMailException, mail, render_mail
+        from pretix.base.services.mail import (
+            SendMailException, mail, render_mail,
+        )
 
         if not self.attendee_email:
             return

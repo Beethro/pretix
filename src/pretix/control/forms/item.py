@@ -437,6 +437,7 @@ class ItemUpdateForm(I18nModelForm):
         self.fields['description'].widget.attrs['rows'] = '4'
         self.fields['sales_channels'] = forms.MultipleChoiceField(
             label=_('Sales channels'),
+            required=False,
             choices=(
                 (c.identifier, c.verbose_name) for c in get_all_sales_channels().values()
             ),
@@ -661,7 +662,8 @@ class ItemAddOnForm(I18nModelForm):
             'addon_category',
             'min_count',
             'max_count',
-            'price_included'
+            'price_included',
+            'multi_allowed',
         ]
         help_texts = {
             'min_count': _('Be aware that setting a minimal number makes it impossible to buy this product if all '

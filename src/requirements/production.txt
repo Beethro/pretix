@@ -1,14 +1,14 @@
 # Functional requirements
-Django==3.0.*
+Django==3.0.*,>=3.0.9
 djangorestframework==3.11.*
 python-dateutil==2.8.*
 isoweek
-requests==2.22.0
+requests==2.24.0
 pytz
 django-bootstrap3==12.0.*
 django-formset-js-improved==0.5.0.2
 django-compressor==2.4.*
-django-hierarkey==1.0.*,>=1.0.3
+django-hierarkey==1.0.*,>=1.0.4
 django-filter==2.2.*
 django-scopes==1.2.*
 reportlab>=3.5.18*
@@ -43,6 +43,7 @@ django-oauth-toolkit==1.2.*
 oauthlib==3.1.*
 django-jsonfallback>=2.1.2
 psycopg2-binary
+tqdm==4.*
 # Stripe
 stripe==2.42.*
 # PayPal

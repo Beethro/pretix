@@ -184,6 +184,10 @@ class NamePartsFormField(forms.MultiValueField):
                     raise forms.ValidationError(self.error_messages['required'], code='required')
         if self.require_all_fields and not all(v for v in value):
             raise forms.ValidationError(self.error_messages['incomplete'], code='required')
+
+        if sum(len(v) for v in value if v) > 250:
+            raise forms.ValidationError(_('Please enter a shorter name.'), code='max_length')
+
         return value
 
 
@@ -397,13 +401,14 @@ class BaseQuestionsForm(forms.Form):
                 )
             elif q.type == Question.TYPE_COUNTRYCODE:
                 field = CountryField(
-                    countries=CachedCountries
+                    countries=CachedCountries,
+                    blank=True, null=True, blank_label=' ',
                 ).formfield(
                     label=label, required=required,
                     help_text=help_text,
                     widget=forms.Select,
-                    empty_label='',
-                    initial=initial.answer if initial else guess_country(event),
+                    empty_label=' ',
+                    initial=initial.answer if initial else (guess_country(event) if required else None),
                 )
             elif q.type == Question.TYPE_CHOICE:
                 field = forms.ModelChoiceField(
@@ -549,7 +554,8 @@ class BaseQuestionsForm(forms.Form):
 
         if not self.all_optional:
             for q in question_cache.values():
-                if question_is_required(q) and not d.get('question_%d' % q.pk):
+                answer = d.get('question_%d' % q.pk)
+                if question_is_required(q) and not answer and answer != 0:
                     raise ValidationError({'question_%d' % q.pk: [_('This field is required')]})
 
         return d

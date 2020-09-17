@@ -29,6 +29,9 @@ class MetaDataField(Field):
         }
 
     def to_internal_value(self, data):
+        if not isinstance(data, dict) or not all(isinstance(k, str) for k in data.keys()):
+            raise ValidationError('meta_data needs to be an object (str -> str).')
+
         return {
             'meta_data': data
         }
@@ -42,6 +45,8 @@ class MetaPropertyField(Field):
         }
 
     def to_internal_value(self, data):
+        if not isinstance(data, dict) or not all(isinstance(k, str) for k in data.keys()) or not all(isinstance(k, str) for k in data.values()):
+            raise ValidationError('item_meta_properties needs to be an object (str -> str).')
         return {
             'item_meta_properties': data
         }
@@ -58,6 +63,8 @@ class SeatCategoryMappingField(Field):
         }
 
     def to_internal_value(self, data):
+        if not isinstance(data, dict) or not all(isinstance(k, str) for k in data.keys()) or not all(isinstance(k, int) for k in data.values()):
+            raise ValidationError('seat_category_mapping needs to be an object (str -> int).')
         return {
             'seat_category_mapping': data or {}
         }
@@ -452,27 +459,29 @@ class SubEventSerializer(I18nAwareModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        item_price_overrides_data = validated_data.pop('subeventitem_set') if 'subeventitem_set' in validated_data else {}
-        variation_price_overrides_data = validated_data.pop('subeventitemvariation_set') if 'subeventitemvariation_set' in validated_data else {}
+        item_price_overrides_data = validated_data.pop('subeventitem_set', None)
+        variation_price_overrides_data = validated_data.pop('subeventitemvariation_set', None)
         meta_data = validated_data.pop('meta_data', None)
         seat_category_mapping = validated_data.pop('seat_category_mapping', None)
         subevent = super().update(instance, validated_data)
 
-        existing_item_overrides = {item.item: item.id for item in SubEventItem.objects.filter(subevent=subevent)}
+        if item_price_overrides_data is not None:
+            existing_item_overrides = {item.item: item.id for item in SubEventItem.objects.filter(subevent=subevent)}
 
-        for item_price_override_data in item_price_overrides_data:
-            id = existing_item_overrides.pop(item_price_override_data['item'], None)
-            SubEventItem(id=id, subevent=subevent, **item_price_override_data).save()
+            for item_price_override_data in item_price_overrides_data:
+                id = existing_item_overrides.pop(item_price_override_data['item'], None)
+                SubEventItem(id=id, subevent=subevent, **item_price_override_data).save()
 
-        SubEventItem.objects.filter(id__in=existing_item_overrides.values()).delete()
+            SubEventItem.objects.filter(id__in=existing_item_overrides.values()).delete()
 
-        existing_variation_overrides = {item.variation: item.id for item in SubEventItemVariation.objects.filter(subevent=subevent)}
+        if variation_price_overrides_data is not None:
+            existing_variation_overrides = {item.variation: item.id for item in SubEventItemVariation.objects.filter(subevent=subevent)}
 
-        for variation_price_override_data in variation_price_overrides_data:
-            id = existing_variation_overrides.pop(variation_price_override_data['variation'], None)
-            SubEventItemVariation(id=id, subevent=subevent, **variation_price_override_data).save()
+            for variation_price_override_data in variation_price_overrides_data:
+                id = existing_variation_overrides.pop(variation_price_override_data['variation'], None)
+                SubEventItemVariation(id=id, subevent=subevent, **variation_price_override_data).save()
 
-        SubEventItemVariation.objects.filter(id__in=existing_variation_overrides.values()).delete()
+            SubEventItemVariation.objects.filter(id__in=existing_variation_overrides.values()).delete()
 
         # Meta data
         if meta_data is not None:
@@ -565,11 +574,13 @@ class EventSettingsSerializer(serializers.Serializer):
         'attendee_addresses_required',
         'attendee_company_asked',
         'attendee_company_required',
-        'confirm_text',
+        'confirm_texts',
         'order_email_asked_twice',
+        'payment_term_mode',
         'payment_term_days',
-        'payment_term_last',
         'payment_term_weekdays',
+        'payment_term_minutes',
+        'payment_term_last',
         'payment_term_expire_automatically',
         'payment_term_accept_late',
         'payment_explanation',
@@ -597,6 +608,7 @@ class EventSettingsSerializer(serializers.Serializer):
         'invoice_numbers_consecutive',
         'invoice_numbers_prefix',
         'invoice_numbers_prefix_cancellations',
+        'invoice_numbers_counter_length',
         'invoice_attendee_name',
         'invoice_include_expire_date',
         'invoice_address_explanation_text',
@@ -623,6 +635,9 @@ class EventSettingsSerializer(serializers.Serializer):
         'cancel_allow_user_paid_adjust_fees_explanation',
         'cancel_allow_user_paid_refund_as_giftcard',
         'cancel_allow_user_paid_require_approval',
+        'change_allow_user_variation',
+        'change_allow_user_until',
+        'change_allow_user_price',
     ]
 
     def __init__(self, *args, **kwargs):

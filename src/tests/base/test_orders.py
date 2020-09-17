@@ -79,6 +79,20 @@ def test_expiry_weekdays(event):
 
 
 @pytest.mark.django_db
+def test_expiry_minutes(event):
+    today = now()
+    event.settings.set('payment_term_days', 5)
+    event.settings.set('payment_term_mode', 'minutes')
+    event.settings.set('payment_term_minutes', 30)
+    event.settings.set('payment_term_weekdays', False)
+    order = _create_order(event, email='dummy@example.org', positions=[],
+                          now_dt=today, payment_provider=FreeOrderProvider(event),
+                          locale='de')[0]
+    assert (order.expires - today).days == 0
+    assert (order.expires - today).seconds == 30 * 60
+
+
+@pytest.mark.django_db
 def test_expiry_last(event):
     today = now()
     event.settings.set('payment_term_days', 5)
@@ -103,7 +117,7 @@ def test_expiry_last_relative(event):
     event.date_from = now() + timedelta(days=5)
     event.save()
     event.settings.set('payment_term_last', RelativeDateWrapper(
-        RelativeDate(days_before=2, time=None, base_date_name='date_from')
+        RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
     ))
     order = _create_order(event, email='dummy@example.org', positions=[],
                           now_dt=today, payment_provider=FreeOrderProvider(event),
@@ -134,7 +148,7 @@ def test_expiry_last_relative_subevents(event):
     )
 
     event.settings.set('payment_term_last', RelativeDateWrapper(
-        RelativeDate(days_before=2, time=None, base_date_name='date_from')
+        RelativeDate(days_before=2, time=None, base_date_name='date_from', minutes_before=None)
     ))
     order = _create_order(event, email='dummy@example.org', positions=[cp1, cp2],
                           now_dt=today, payment_provider=FreeOrderProvider(event),
@@ -543,6 +557,13 @@ class DownloadReminderTests(TestCase):
         send_download_reminders(sender=self.event)
         assert len(djmail.outbox) == 0
 
+    @classscope(attr='o')
+    def test_not_sent_for_disabled_sales_channel(self):
+        self.event.settings.mail_days_download_reminder = 2
+        self.event.settings.mail_sales_channel_download_reminder = []
+        send_download_reminders(sender=self.event)
+        assert len(djmail.outbox) == 0
+
 
 class OrderCancelTests(TestCase):
     def setUp(self):
@@ -775,9 +796,9 @@ class OrderChangeManagerTests(TestCase):
                 layout_category='Stalls', product=self.stalls
             )
             self.quota.items.add(self.stalls)
-            self.seat_a1 = self.event.seats.create(name="A1", product=self.stalls, seat_guid="A1")
-            self.seat_a2 = self.event.seats.create(name="A2", product=self.stalls, seat_guid="A2")
-            self.seat_a3 = self.event.seats.create(name="A3", product=self.stalls, seat_guid="A3")
+            self.seat_a1 = self.event.seats.create(seat_number="A1", product=self.stalls, seat_guid="A1")
+            self.seat_a2 = self.event.seats.create(seat_number="A2", product=self.stalls, seat_guid="A2")
+            self.seat_a3 = self.event.seats.create(seat_number="A3", product=self.stalls, seat_guid="A3")
 
     def _enable_reverse_charge(self):
         self.tr7.eu_reverse_charge = True
@@ -2091,7 +2112,12 @@ class OrderChangeManagerTests(TestCase):
             self.ocm.commit()
 
     @classscope(attr='o')
-    def test_add_with_seat_required(self):
+    def test_add_with_seat_not_required_if_no_choice(self):
+        self.event.settings.seating_choice = False
+        self.ocm.add_position(self.stalls, None, price=Decimal('13.00'))
+
+    @classscope(attr='o')
+    def test_add_with_seat_not_required(self):
         with self.assertRaises(OrderError):
             self.ocm.add_position(self.stalls, None, price=Decimal('13.00'))
 
@@ -2676,7 +2702,7 @@ class OrderReactivateTest(TestCase):
             self.quota = self.event.quotas.create(name='Test', size=None)
             self.quota.items.add(self.stalls)
             self.quota.items.add(self.ticket)
-            self.seat_a1 = self.event.seats.create(name="A1", product=self.stalls, seat_guid="A1")
+            self.seat_a1 = self.event.seats.create(seat_number="A1", product=self.stalls, seat_guid="A1")
             generate_invoice(self.order)
             djmail.outbox = []
 

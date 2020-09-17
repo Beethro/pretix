@@ -1,5 +1,6 @@
 import json
-from collections import OrderedDict
+import operator
+from collections import OrderedDict, UserList
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -35,6 +36,20 @@ def country_choice_kwargs():
     return {
         'choices': allcountries
     }
+
+
+class LazyI18nStringList(UserList):
+    def __init__(self, init_list=None):
+        super().__init__()
+        if init_list is not None:
+            self.data = [v if isinstance(v, LazyI18nString) else LazyI18nString(v) for v in init_list]
+
+    def serialize(self):
+        return json.dumps([s.data for s in self.data])
+
+    @classmethod
+    def unserialize(cls, s):
+        return cls(json.loads(s))
 
 
 DEFAULTS = {
@@ -309,6 +324,16 @@ DEFAULTS = {
             help_text=_("The expiration date will not be shown if the invoice is generated after the order is paid."),
         )
     },
+    'invoice_numbers_counter_length': {
+        'default': '5',
+        'type': int,
+        'form_class': forms.IntegerField,
+        'serializer_class': serializers.IntegerField,
+        'form_kwargs': dict(
+            label=_("Minimum length of invoice number after prefix"),
+            help_text=_("The part of your invoice number after your prefix will be filled up with leading zeros up to this length, e.g. INV-001 or INV-00001."),
+        )
+    },
     'invoice_numbers_consecutive': {
         'default': 'True',
         'type': bool,
@@ -398,6 +423,29 @@ DEFAULTS = {
                         "if you want.")
         )
     },
+    'payment_term_mode': {
+        'default': 'days',
+        'type': str,
+        'form_class': forms.ChoiceField,
+        'serializer_class': serializers.ChoiceField,
+        'serializer_kwargs': dict(
+            choices=(
+                ('days', _("in days")),
+                ('minutes', _("in minutes"))
+            ),
+        ),
+        'form_kwargs': dict(
+            label=_("Set payment term"),
+            widget=forms.RadioSelect,
+            required=True,
+            choices=(
+                ('days', _("in days")),
+                ('minutes', _("in minutes"))
+            ),
+            help_text=_("If using days, the order will expire at the end of the last day. "
+                        "Using minutes is more exact, but should only be used for real-time payment methods.")
+        )
+    },
     'payment_term_days': {
         'default': '14',
         'type': int,
@@ -405,29 +453,22 @@ DEFAULTS = {
         'serializer_class': serializers.IntegerField,
         'form_kwargs': dict(
             label=_('Payment term in days'),
+            widget=forms.NumberInput(
+                attrs={
+                    'data-display-dependency': '#id_payment_term_mode_0',
+                    'data-required-if': '#id_payment_term_mode_0'
+                },
+            ),
             help_text=_("The number of days after placing an order the user has to pay to preserve their reservation. If "
                         "you use slow payment methods like bank transfer, we recommend 14 days. If you only use real-time "
                         "payment methods, we recommend still setting two or three days to allow people to retry failed "
                         "payments."),
-            required=True,
             validators=[MinValueValidator(0),
                         MaxValueValidator(1000000)]
         ),
         'serializer_kwargs': dict(
             validators=[MinValueValidator(0),
                         MaxValueValidator(1000000)]
-        )
-    },
-    'payment_term_last': {
-        'default': None,
-        'type': RelativeDateWrapper,
-        'form_class': RelativeDateField,
-        'serializer_class': SerializerRelativeDateField,
-        'form_kwargs': dict(
-            label=_('Last date of payments'),
-            help_text=_("The last date any payments are accepted. This has precedence over the number of "
-                        "days configured above. If you use the event series feature and an order contains tickets for "
-                        "multiple dates, the earliest date will be used."),
         )
     },
     'payment_term_weekdays': {
@@ -439,7 +480,49 @@ DEFAULTS = {
             label=_('Only end payment terms on weekdays'),
             help_text=_("If this is activated and the payment term of any order ends on a Saturday or Sunday, it will be "
                         "moved to the next Monday instead. This is required in some countries by civil law. This will "
-                        "not effect the last date of payments configured above."),
+                        "not effect the last date of payments configured below."),
+            widget=forms.CheckboxInput(
+                attrs={
+                    'data-display-dependency': '#id_payment_term_mode_0',
+                    'data-required-if': '#id_payment_term_mode_0'
+                },
+            ),
+        )
+    },
+    'payment_term_minutes': {
+        'default': '30',
+        'type': int,
+        'form_class': forms.IntegerField,
+        'serializer_class': serializers.IntegerField,
+        'form_kwargs': dict(
+            label=_('Payment term in minutes'),
+            help_text=_("The number of minutes after placing an order the user has to pay to preserve their reservation. "
+                        "Only use this if you exclusively offer real-time payment methods. Please note that for technical reasons, "
+                        "the actual time frame might be a few minutes longer before the order is marked as expired."),
+            validators=[MinValueValidator(0),
+                        MaxValueValidator(1440)],
+            widget=forms.NumberInput(
+                attrs={
+                    'data-display-dependency': '#id_payment_term_mode_1',
+                    'data-required-if': '#id_payment_term_mode_1'
+                },
+            ),
+        ),
+        'serializer_kwargs': dict(
+            validators=[MinValueValidator(0),
+                        MaxValueValidator(1440)]
+        )
+    },
+    'payment_term_last': {
+        'default': None,
+        'type': RelativeDateWrapper,
+        'form_class': RelativeDateField,
+        'serializer_class': SerializerRelativeDateField,
+        'form_kwargs': dict(
+            label=_('Last date of payments'),
+            help_text=_("The last date any payments are accepted. This has precedence over the terms "
+                        "configured above. If you use the event series feature and an order contains tickets for "
+                        "multiple dates, the earliest date will be used."),
         )
     },
     'payment_term_expire_automatically': {
@@ -500,7 +583,7 @@ DEFAULTS = {
                 ('admin', _('Only manually in admin panel')),
                 ('user', _('Automatically on user request')),
                 ('True', _('Automatically for all created orders')),
-                ('paid', _('Automatically on payment')),
+                ('paid', _('Automatically on payment or when required by payment method')),
             ),
         ),
         'form_kwargs': dict(
@@ -511,7 +594,7 @@ DEFAULTS = {
                 ('admin', _('Only manually in admin panel')),
                 ('user', _('Automatically on user request')),
                 ('True', _('Automatically for all created orders')),
-                ('paid', _('Automatically on payment')),
+                ('paid', _('Automatically on payment or when required by payment method')),
             ),
             help_text=_("Invoices will never be automatically generated for free orders.")
         )
@@ -910,7 +993,8 @@ DEFAULTS = {
                 ('list', _('List')),
                 ('week', _('Week calendar')),
                 ('calendar', _('Month calendar')),
-            )
+            ),
+            help_text=_('If your event series has more than 50 dates in the future, only the month or week calendar can be used.')
         ),
     },
     'last_order_modification_date': {
@@ -923,6 +1007,48 @@ DEFAULTS = {
             help_text=_("The last date users can modify details of their orders, such as attendee names or "
                         "answers to questions. If you use the event series feature and an order contains tickets for "
                         "multiple event dates, the earliest date will be used."),
+        )
+    },
+    'change_allow_user_variation': {
+        'default': 'False',
+        'type': bool,
+        'form_class': forms.BooleanField,
+        'serializer_class': serializers.BooleanField,
+        'form_kwargs': dict(
+            label=_("Customers can change the variation of the products they purchased"),
+        )
+    },
+    'change_allow_user_price': {
+        'default': 'gte',
+        'type': str,
+        'form_class': forms.ChoiceField,
+        'serializer_class': serializers.ChoiceField,
+        'serializer_kwargs': dict(
+            choices=(
+                ('gte', _('Only allow changes if the resulting price is higher or equal than the previous price.')),
+                ('gt', _('Only allow changes if the resulting price is higher than the previous price.')),
+                ('eq', _('Only allow changes if the resulting price is equal to the previous price.')),
+                ('any', _('Allow changes regardless of price, even if this results in a refund.')),
+            )
+        ),
+        'form_kwargs': dict(
+            label=_("Requirement for changed prices"),
+            choices=(
+                ('gte', _('Only allow changes if the resulting price is higher or equal than the previous price.')),
+                ('gt', _('Only allow changes if the resulting price is higher than the previous price.')),
+                ('eq', _('Only allow changes if the resulting price is equal to the previous price.')),
+                ('any', _('Allow changes regardless of price, even if this results in a refund.')),
+            ),
+            widget=forms.RadioSelect,
+        ),
+    },
+    'change_allow_user_until': {
+        'default': None,
+        'type': RelativeDateWrapper,
+        'form_class': RelativeDateTimeField,
+        'serializer_class': SerializerRelativeDateTimeField,
+        'form_kwargs': dict(
+            label=_("Do not allow changes after"),
         )
     },
     'cancel_allow_user': {
@@ -1077,18 +1203,11 @@ DEFAULTS = {
         ),
         'serializer_class': serializers.URLField,
     },
-    'confirm_text': {
-        'default': None,
-        'type': LazyI18nString,
-        'form_class': I18nFormField,
-        'serializer_class': I18nField,
-        'form_kwargs': dict(
-            label=_('Confirmation text'),
-            help_text=_('This text needs to be confirmed by the user before a purchase is possible. You could for example '
-                        'link your terms of service here. If you use the Pages feature to publish your terms of service, '
-                        'you don\'t need this setting since you can configure it there.'),
-            widget=I18nTextarea,
-        )
+    'confirm_texts': {
+        'default': LazyI18nStringList(),
+        'type': LazyI18nStringList,
+        'serializer_class': serializers.ListField,
+        'serializer_kwargs': lambda: dict(child=I18nField()),
     },
     'mail_html_renderer': {
         'default': 'classic',
@@ -1139,6 +1258,14 @@ DEFAULTS = {
             help_text=_("Sender name used in conjunction with the sender address for outgoing emails. "
                         "Defaults to your event name."),
         )
+    },
+    'mail_sales_channel_placed_paid': {
+        'default': ['web'],
+        'type': list,
+    },
+    'mail_sales_channel_download_reminder': {
+        'default': ['web'],
+        'type': list,
     },
     'mail_text_signature': {
         'type': LazyI18nString,
@@ -1349,6 +1476,19 @@ Please continue by paying for your order before {expire_date}.
 
 You can select a payment method and perform the payment here:
 
+{url}
+
+Best regards,
+Your {event} team"""))
+    },
+    'mail_text_order_approved_free': {
+        'type': LazyI18nString,
+        'default': LazyI18nString.from_gettext(gettext_noop("""Hello,
+
+we approved your order for {event} and will be happy to welcome you
+at our event. As you only ordered free products, no payment is required.
+
+You can change your order details and view the status of your order at
 {url}
 
 Best regards,
@@ -1662,6 +1802,18 @@ Your {event} team"""))
         'default': settings.ENTROPY['giftcard_secret'],
         'type': int
     },
+    'seating_choice': {
+        'default': 'True',
+        'form_class': forms.BooleanField,
+        'serializer_class': serializers.BooleanField,
+        'form_kwargs': dict(
+            label=_("Customers can choose their own seats"),
+            help_text=_("If disabled, you will need to manually assign seats in the backend. Note that this can mean "
+                        "people will not know their seat after their purchase and it might not be written on their "
+                        "ticket."),
+        ),
+        'type': bool,
+    },
     'seating_minimal_distance': {
         'default': '0',
         'type': float
@@ -1881,6 +2033,9 @@ def i18n_uns(v):
 settings_hierarkey.add_type(LazyI18nString,
                             serialize=lambda s: json.dumps(s.data),
                             unserialize=i18n_uns)
+settings_hierarkey.add_type(LazyI18nStringList,
+                            serialize=operator.methodcaller("serialize"),
+                            unserialize=LazyI18nStringList.unserialize)
 settings_hierarkey.add_type(RelativeDateWrapper,
                             serialize=lambda rdw: rdw.to_string(),
                             unserialize=lambda s: RelativeDateWrapper.from_string(s))

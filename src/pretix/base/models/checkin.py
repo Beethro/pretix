@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.db import models
 from django.db.models import Exists, F, Max, OuterRef, Q, Subquery
 from django.utils.timezone import now
 from django.utils.translation import gettext_lazy as _, pgettext_lazy
-from django_scopes import ScopedManager
+from django_scopes import ScopedManager, scopes_disabled
 from jsonfallback.fields import FallbackJSONField
 
 from pretix.base.models import LoggedModel
@@ -47,7 +48,7 @@ class CheckinList(LoggedModel):
 
     @property
     def positions(self):
-        from . import OrderPosition, Order
+        from . import Order, OrderPosition
 
         qs = OrderPosition.objects.filter(
             order__event=self.event,
@@ -89,11 +90,14 @@ class CheckinList(LoggedModel):
         ).count()
 
     @property
+    @scopes_disabled()
+    # Disable scopes, because this query is safe and the additional organizer filter in the EXISTS() subquery tricks PostgreSQL into a bad
+    # subplan that sequentially scans all events
     def checkin_count(self):
         return self.event.cache.get_or_set(
             'checkin_list_{}_checkin_count'.format(self.pk),
-            lambda: self.positions.annotate(
-                checkedin=Exists(Checkin.objects.filter(list_id=self.pk, position=OuterRef('pk')))
+            lambda: self.positions.using(settings.DATABASE_REPLICA).annotate(
+                checkedin=Exists(Checkin.objects.filter(list_id=self.pk, position=OuterRef('pk'), type=Checkin.TYPE_ENTRY,))
             ).filter(
                 checkedin=True
             ).count(),

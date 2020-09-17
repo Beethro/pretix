@@ -415,7 +415,7 @@ class Event(EventMixin, LoggedModel):
             return super().presale_has_ended
 
     def delete_all_orders(self, really=False):
-        from .orders import OrderRefund, OrderPayment, OrderPosition, OrderFee
+        from .orders import OrderFee, OrderPayment, OrderPosition, OrderRefund
 
         if not really:
             raise TypeError("Pass really=True as a parameter.")
@@ -502,8 +502,10 @@ class Event(EventMixin, LoggedModel):
         ), tz)
 
     def copy_data_from(self, other):
-        from . import ItemAddOn, ItemCategory, Item, Question, Quota, ItemMetaValue
         from ..signals import event_copy_data
+        from . import (
+            Item, ItemAddOn, ItemCategory, ItemMetaValue, Question, Quota,
+        )
 
         self.plugins = other.plugins
         self.is_public = other.is_public
@@ -883,6 +885,7 @@ class Event(EventMixin, LoggedModel):
     def delete_sub_objects(self):
         self.cartposition_set.filter(addon_to__isnull=False).delete()
         self.cartposition_set.all().delete()
+        self.vouchers.all().delete()
         self.items.all().delete()
         self.subevents.all().delete()
 
@@ -1111,11 +1114,27 @@ class SubEvent(EventMixin, LoggedModel):
         if self.event and clear_cache:
             self.event.cache.clear()
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__original_dates = (self.date_from, self.date_to)
+
     def save(self, *args, **kwargs):
+        from .orders import Order
+
         clear_cache = kwargs.pop('clear_cache', False)
         super().save(*args, **kwargs)
         if self.event and clear_cache:
             self.event.cache.clear()
+
+        if (self.date_from, self.date_to) != self.__original_dates:
+            """
+            This is required to guarantee a synchronization invariant of our scanning apps.
+            Our syncing apps throw away order records of subevents more than X days ago, since
+            they are not interesting for ticket scanning and pose a performance hazard. However,
+            the app needs to know when a subevent is moved to a date in the future, since that
+            might require it to re-download and re-store the orders.
+            """
+            Order.objects.filter(all_positions__subevent=self).update(last_modified=now())
 
     @staticmethod
     def clean_items(event, items):
@@ -1183,8 +1202,8 @@ class RequiredAction(models.Model):
         created = not self.pk
         super().save(*args, **kwargs)
         if created:
-            from .log import LogEntry
             from ..services.notifications import notify
+            from .log import LogEntry
 
             logentry = LogEntry.objects.create(
                 content_object=self,

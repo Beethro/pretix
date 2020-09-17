@@ -565,7 +565,7 @@ class OrderRefundProcess(OrderView):
         if self.refund.state == OrderRefund.REFUND_STATE_EXTERNAL:
             self.refund.done(user=self.request.user)
 
-            if self.request.POST.get("action") == "r" and self.order.status != Order.STATUS_CANCELED:
+            if self.request.POST.get("action") == "r" and (self.order.status != Order.STATUS_CANCELED and self.order.positions.exists()):
                 mark_order_refunded(self.order, user=self.request.user)
             elif not (self.order.status == Order.STATUS_PAID and self.order.pending_sum <= 0):
                 self.order.status = Order.STATUS_PENDING
@@ -1514,7 +1514,7 @@ class OrderChange(OrderView):
                 elif change_subevent is not None:
                     ocm.change_subevent(p, *change_subevent)
 
-                if p.seat and p.form.cleaned_data['seat'] and p.form.cleaned_data['seat'] != p.seat.seat_guid:
+                if p.form.cleaned_data.get('seat') and (not p.seat or p.form.cleaned_data['seat'] != p.seat.seat_guid):
                     ocm.change_seat(p, p.form.cleaned_data['seat'])
 
                 if p.form.cleaned_data['price'] is not None and p.form.cleaned_data['price'] != p.price:
@@ -2032,7 +2032,7 @@ class EventCancel(EventPermissionRequiredMixin, AsyncAction, FormView):
             send=form.cleaned_data.get('send'),
             send_subject=form.cleaned_data.get('send_subject').data,
             send_message=form.cleaned_data.get('send_message').data,
-            send_waitinglist=form.cleaned_data.get('send'),
+            send_waitinglist=form.cleaned_data.get('send_waitinglist'),
             send_waitinglist_subject=form.cleaned_data.get('send_waitinglist_subject').data,
             send_waitinglist_message=form.cleaned_data.get('send_waitinglist_message').data,
             user=self.request.user.pk,

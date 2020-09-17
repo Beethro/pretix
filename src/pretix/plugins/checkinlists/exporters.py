@@ -120,10 +120,18 @@ class CheckInListMixin(BaseExporter):
             m=Max('datetime')
         ).values('m')
 
+        cqsin = cqs.filter(
+            type=Checkin.TYPE_ENTRY
+        )
+        cqsout = cqs.filter(
+            type=Checkin.TYPE_EXIT
+        )
+
         qs = OrderPosition.objects.filter(
             order__event=self.event,
         ).annotate(
-            last_checked_in=Subquery(cqs),
+            last_checked_in=Subquery(cqsin),
+            last_checked_out=Subquery(cqsout),
             auto_checked_in=Exists(
                 Checkin.objects.filter(position_id=OuterRef('pk'), list_id=cl.pk, auto_checked_in=True)
             )
@@ -393,7 +401,7 @@ class CSVCheckinList(CheckInListMixin, ListExporter):
             for k, label, w in name_scheme['fields']:
                 headers.append(_('Attendee name: {part}').format(part=label))
         headers += [
-            _('Product'), _('Price'), _('Checked in'), _('Automatically checked in')
+            _('Product'), _('Price'), _('Checked in'), _('Checked out'), _('Automatically checked in')
         ]
         if not cl.include_pending:
             qs = qs.filter(order__status=Order.STATUS_PAID)
@@ -419,7 +427,14 @@ class CSVCheckinList(CheckInListMixin, ListExporter):
         headers.append(_('Order date'))
         headers.append(_('Requires special attention'))
         headers.append(_('Comment'))
+        headers.append(_('Seat ID'))
+        headers.append(_('Seat name'))
+        headers.append(_('Seat zone'))
+        headers.append(_('Seat row'))
+        headers.append(_('Seat number'))
         yield headers
+
+        yield self.ProgressSetTotal(total=qs.count())
 
         for op in qs:
             try:
@@ -434,6 +449,15 @@ class CSVCheckinList(CheckInListMixin, ListExporter):
                 last_checked_in = op.last_checked_in
             if last_checked_in and not is_aware(last_checked_in):
                 last_checked_in = make_aware(last_checked_in, UTC)
+
+            last_checked_out = None
+            if isinstance(op.last_checked_out, str):  # SQLite
+                last_checked_out = dateutil.parser.parse(op.last_checked_out)
+            elif op.last_checked_out:
+                last_checked_out = op.last_checked_out
+            if last_checked_out and not is_aware(last_checked_out):
+                last_checked_out = make_aware(last_checked_out, UTC)
+
             row = [
                 op.order.code,
                 op.attendee_name or (op.addon_to.attendee_name if op.addon_to else '') or ia.name,
@@ -452,6 +476,8 @@ class CSVCheckinList(CheckInListMixin, ListExporter):
                 op.price,
                 date_format(last_checked_in.astimezone(self.event.timezone), 'SHORT_DATETIME_FORMAT')
                 if last_checked_in else '',
+                date_format(last_checked_out.astimezone(self.event.timezone), 'SHORT_DATETIME_FORMAT')
+                if last_checked_out else '',
                 _('Yes') if op.auto_checked_in else _('No'),
             ]
             if cl.include_pending:
@@ -492,7 +518,124 @@ class CSVCheckinList(CheckInListMixin, ListExporter):
             row.append(op.order.datetime.astimezone(self.event.timezone).strftime('%Y-%m-%d'))
             row.append(_('Yes') if op.order.checkin_attention or op.item.checkin_attention else _('No'))
             row.append(op.order.comment or "")
+
+            if op.seat:
+                row += [
+                    op.seat.seat_guid,
+                    str(op.seat),
+                    op.seat.zone_name,
+                    op.seat.row_name,
+                    op.seat.seat_number,
+                ]
+            else:
+                row += ['', '', '', '', '']
+
             yield row
 
     def get_filename(self):
         return '{}_checkin'.format(self.event.slug)
+
+
+class CheckinLogList(ListExporter):
+    name = "checkinlog"
+    identifier = 'checkinlog'
+    verbose_name = gettext_lazy('Check-in log (all successful scans)')
+
+    @property
+    def additional_form_fields(self):
+        return self._fields
+
+    def iterate_list(self, form_data):
+        yield [
+            _('Date'),
+            _('Time'),
+            _('Check-in list'),
+            _('Scan type'),
+            _('Order code'),
+            _('Position ID'),
+            _('Secret'),
+            _('Product'),
+            _('Name'),
+            _('Device'),
+            _('Offline override'),
+            _('Automatically checked in'),
+        ]
+
+        qs = Checkin.objects.filter(
+            position__order__event=self.event,
+        )
+        if form_data.get('list'):
+            qs = qs.filter(list_id=form_data.get('list'))
+        if form_data.get('items'):
+            qs = qs.filter(position__item_id__in=form_data['items'])
+
+        yield self.ProgressSetTotal(total=qs.count())
+
+        qs = qs.select_related(
+            'position__item', 'position__order', 'position__order__invoice_address', 'position', 'list', 'device'
+        ).order_by(
+            'datetime'
+        )
+        for ci in qs.iterator():
+            try:
+                ia = ci.position.order.invoice_address
+            except InvoiceAddress.DoesNotExist:
+                ia = InvoiceAddress()
+
+            yield [
+                date_format(ci.datetime, 'SHORT_DATE_FORMAT'),
+                date_format(ci.datetime, 'TIME_FORMAT'),
+                str(ci.list),
+                ci.get_type_display(),
+                ci.position.order.code,
+                ci.position.positionid,
+                ci.position.secret,
+                str(ci.position.item),
+                ci.position.attendee_name or ia.name,
+                str(ci.device),
+                _('Yes') if ci.forced else _('No'),
+                _('Yes') if ci.auto_checked_in else _('No'),
+            ]
+
+    def get_filename(self):
+        return '{}_checkinlog'.format(self.event.slug)
+
+    @property
+    def _fields(self):
+        d = OrderedDict(
+            [
+                ('list',
+                 forms.ModelChoiceField(
+                     queryset=self.event.checkin_lists.all(),
+                     label=_('Check-in list'),
+                     widget=forms.RadioSelect(
+                         attrs={'class': 'scrolling-choice'}
+                     ),
+                 )),
+                ('items',
+                 forms.ModelMultipleChoiceField(
+                     queryset=self.event.items.all(),
+                     label=_('Limit to products'),
+                     widget=forms.CheckboxSelectMultiple(
+                         attrs={'class': 'scrolling-multiple-choice'}
+                     ),
+                     initial=self.event.items.all()
+                 )),
+            ]
+        )
+
+        d['list'].queryset = self.event.checkin_lists.all()
+        d['list'].widget = Select2(
+            attrs={
+                'data-model-select2': 'generic',
+                'data-select2-url': reverse('control:event.orders.checkinlists.select2', kwargs={
+                    'event': self.event.slug,
+                    'organizer': self.event.organizer.slug,
+                }),
+                'data-placeholder': _('All check-in lists')
+            }
+        )
+        d['list'].widget.choices = d['list'].choices
+        d['list'].required = False
+
+        return d

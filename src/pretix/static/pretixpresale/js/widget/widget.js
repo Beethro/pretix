@@ -186,22 +186,22 @@ var widget_id = makeid(16);
 /* Vue Components */
 Vue.component('availbox', {
     template: ('<div class="pretix-widget-availability-box">'
-        + '<div class="pretix-widget-availability-unavailable" v-if="item.require_voucher">'
+        + '<div class="pretix-widget-availability-unavailable" v-if="require_voucher">'
         + '<small>' + strings.voucher_required + '</small>'
         + '</div>'
         + '<div class="pretix-widget-availability-unavailable"'
-        + '       v-if="!item.require_voucher && avail[0] < 100 && avail[0] > 10">'
+        + '       v-if="!require_voucher && avail[0] < 100 && avail[0] > 10">'
         + strings.reserved
         + '</div>'
         + '<div class="pretix-widget-availability-gone" '
-        + '       v-if="!item.require_voucher && avail[0] <= 10">'
+        + '       v-if="!require_voucher && avail[0] <= 10">'
         + strings.sold_out
         + '</div>'
         + '<div class="pretix-widget-waiting-list-link"'
         + '     v-if="waiting_list_show">'
         + '<a :href="waiting_list_url" target="_blank" @click="$root.open_link_in_frame">' + strings.waiting_list + '</a>'
         + '</div>'
-        + '<div class="pretix-widget-availability-available" v-if="!item.require_voucher && avail[0] === 100">'
+        + '<div class="pretix-widget-availability-available" v-if="!require_voucher && avail[0] === 100">'
         + '<label class="pretix-widget-item-count-single-label" v-if="order_max === 1">'
         + '<input type="checkbox" value="1" :checked="!!amount_selected" @change="amount_selected = $event.target.checked" :name="input_name">'
         + '</label>'
@@ -219,11 +219,14 @@ Vue.component('availbox', {
             this.$set(this.variation, 'amount_selected', 0);
         } else {
             // Automatically set the only available item to be selected.
-            this.$set(this.item, 'amount_selected', this.$root.itemnum === 1 ? 1 : 0);
+            this.$set(this.item, 'amount_selected', this.$root.itemnum === 1 && !this.$root.has_seating_plan ? 1 : 0);
         }
         this.$root.$emit('amounts_changed')
     },
     computed: {
+        require_voucher: function () {
+            return this.item.require_voucher && !this.$root.voucher_code
+        },
         amount_selected: {
             get: function () {
                 return this.item.has_variations ? this.variation.amount_selected : this.item.amount_selected
@@ -254,13 +257,13 @@ Vue.component('availbox', {
             return this.item.has_variations ? this.variation.avail : this.item.avail;
         },
         waiting_list_show: function () {
-            return this.avail[0] < 100 && this.$root.waiting_list_enabled;
+            return this.avail[0] < 100 && this.$root.waiting_list_enabled && this.item.allow_waitinglist;
         },
         waiting_list_url: function () {
             if (this.item.has_variations) {
-                return this.$root.target_url + 'w/' + widget_id + '/waitinglist/?item=' + this.item.id + '&var=' + this.variation.id + '&widget_data=' + escape(this.$root.widget_data_json);
+                return this.$root.target_url + 'w/' + widget_id + '/waitinglist/?item=' + this.item.id + '&var=' + this.variation.id + '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
             } else {
-                return this.$root.target_url + 'w/' + widget_id + '/waitinglist/?item=' + this.item.id + '&widget_data=' + escape(this.$root.widget_data_json);
+                return this.$root.target_url + 'w/' + widget_id + '/waitinglist/?item=' + this.item.id + '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
             }
         }
     }
@@ -506,7 +509,7 @@ var shared_methods = {
                 this.resume();
             }
         } else {
-            var url = this.$root.formTarget + "&locale=" + lang + "&ajax=1";
+            var url = this.$root.formAction + "&locale=" + lang + "&ajax=1";
             this.$root.overlay.frame_loading = true;
 
             this.async_task_interval = 100;
@@ -580,9 +583,9 @@ var shared_methods = {
         } else {
             return;
         }
-        var redirect_url = this.$root.voucherFormTarget + '&voucher=' + escape(this.voucher) + '&subevent=' + this.$root.subevent;
+        var redirect_url = this.$root.voucherFormTarget + '&voucher=' + encodeURIComponent(this.voucher) + '&subevent=' + this.$root.subevent;
         if (this.$root.widget_data) {
-            redirect_url += '&widget_data=' + escape(this.$root.widget_data_json);
+            redirect_url += '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
         }
         var iframe = this.$root.overlay.$children[0].$refs['frame-container'].children[0];
         this.$root.overlay.frame_loading = true;
@@ -590,9 +593,9 @@ var shared_methods = {
     },
     voucher_open: function (voucher) {
         var redirect_url;
-        redirect_url = this.$root.voucherFormTarget + '&voucher=' + escape(voucher);
+        redirect_url = this.$root.voucherFormTarget + '&voucher=' + encodeURIComponent(voucher);
         if (this.$root.widget_data) {
-            redirect_url += '&widget_data=' + escape(this.$root.widget_data_json);
+            redirect_url += '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
         }
         if (this.$root.useIframe) {
             var iframe = this.$root.overlay.$children[0].$refs['frame-container'].children[0];
@@ -609,7 +612,7 @@ var shared_methods = {
             redirect_url += '&take_cart_id=' + this.$root.cart_id;
         }
         if (this.$root.widget_data) {
-            redirect_url += '&widget_data=' + escape(this.$root.widget_data_json);
+            redirect_url += '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
         }
         if (this.$root.useIframe) {
             var iframe = this.$root.overlay.$children[0].$refs['frame-container'].children[0];
@@ -731,7 +734,7 @@ Vue.component('pretix-widget-event-form', {
         + '<div class="pretix-widget-event-details" v-if="($root.events || $root.weeks || $root.days) && $root.date_range">'
         + '{{ $root.date_range }}'
         + '</div>'
-        + '<form method="post" :action="$root.formTarget" ref="form" target="_blank">'
+        + '<form method="post" :action="$root.formAction" ref="form" :target="$root.formTarget">'
         + '<input type="hidden" name="_voucher_code" :value="$root.voucher_code" v-if="$root.voucher_code">'
         + '<input type="hidden" name="subevent" :value="$root.subevent" />'
         + '<input type="hidden" name="widget_data" :value="$root.widget_data_json" />'
@@ -1222,7 +1225,7 @@ Vue.component('pretix-widget', {
     data: shared_widget_data,
     methods: shared_methods,
     mounted: function () {
-        this.mobile = this.$refs.wrapper.clientWidth <= 800;
+        this.mobile = this.$refs.wrapper.clientWidth <= 600;
     },
     computed: {
         classObject: function () {
@@ -1238,7 +1241,7 @@ Vue.component('pretix-widget', {
 Vue.component('pretix-button', {
     template: ('<div class="pretix-widget-wrapper">'
         + '<div class="pretix-widget-button-container">'
-        + '<form :method="$root.formMethod" :action="$root.formTarget" ref="form" target="_blank">'
+        + '<form :method="$root.formMethod" :action="$root.formAction" ref="form" :target="$root.formTarget">'
         + '<input type="hidden" name="_voucher_code" :value="$root.voucher_code" v-if="$root.voucher_code">'
         + '<input type="hidden" name="voucher" :value="$root.voucher_code" v-if="$root.voucher_code">'
         + '<input type="hidden" name="subevent" :value="$root.subevent" />'
@@ -1295,14 +1298,14 @@ var shared_root_methods = {
             url += '&' + this.$root.filter;
         }
         if (this.$root.item_filter) {
-            url += '&items=' + escape(this.$root.item_filter);
+            url += '&items=' + encodeURIComponent(this.$root.item_filter);
         }
         if (this.$root.category_filter) {
-            url += '&categories=' + escape(this.$root.category_filter);
+            url += '&categories=' + encodeURIComponent(this.$root.category_filter);
         }
         var cart_id = getCookie(this.cookieName);
         if (this.$root.voucher_code) {
-            url += '&voucher=' + escape(this.$root.voucher_code);
+            url += '&voucher=' + encodeURIComponent(this.$root.voucher_code);
         }
         if (cart_id) {
             url += "&cart_id=" + cart_id;
@@ -1390,7 +1393,7 @@ var shared_root_methods = {
             redirect_url += '&take_cart_id=' + this.$root.cart_id;
         }
         if (this.$root.widget_data) {
-            redirect_url += '&widget_data=' + escape(this.$root.widget_data_json);
+            redirect_url += '&widget_data=' + encodeURIComponent(this.$root.widget_data_json);
         }
         if (this.$root.useIframe) {
             var iframe = this.$root.overlay.$children[0].$refs['frame-container'].children[0];
@@ -1413,6 +1416,19 @@ var shared_root_computed = {
     cookieName: function () {
         return "pretix_widget_" + this.target_url.replace(/[^a-zA-Z0-9]+/g, "_");
     },
+    formTarget: function () {
+        var is_firefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+        var is_android = navigator.userAgent.toLowerCase().indexOf("android") > -1;
+        if (is_android && is_firefox) {
+            // Opening a POST form in a new browser fails in Firefox. This is supposed to be fixed since FF 76
+            // but for some reason, it is still the case in FF for Android.
+            // https://bugzilla.mozilla.org/show_bug.cgi?id=1629441
+            // https://github.com/pretix/pretix/issues/1040
+            return "_top";
+        } else {
+            return "_blank";
+        }
+    },
     voucherFormTarget: function () {
         var form_target = this.target_url + 'w/' + widget_id + '/redeem?iframe=1&locale=' + lang;
         var cookie = getCookie(this.cookieName);
@@ -1430,7 +1446,7 @@ var shared_root_computed = {
         }
         return 'post';
     },
-    formTarget: function () {
+    formAction: function () {
         if (!this.useIframe && this.is_button && this.items.length === 0) {
             var target = this.target_url;
             if (this.voucher_code) {

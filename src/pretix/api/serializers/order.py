@@ -270,8 +270,9 @@ class CheckinListOrderPositionSerializer(OrderPositionSerializer):
     class Meta:
         model = OrderPosition
         fields = ('id', 'order', 'positionid', 'item', 'variation', 'price', 'attendee_name', 'attendee_name_parts',
+                  'company', 'street', 'zipcode', 'city', 'country', 'state',
                   'attendee_email', 'voucher', 'tax_rate', 'tax_value', 'secret', 'addon_to', 'subevent', 'checkins',
-                  'downloads', 'answers', 'tax_rule', 'pseudonymization_id', 'pdf_data', 'require_attention',
+                  'downloads', 'answers', 'tax_rule', 'pseudonymization_id', 'pdf_data', 'seat', 'require_attention',
                   'order__status')
 
 
@@ -375,6 +376,14 @@ class OrderSerializer(I18nAwareModelSerializer):
         super().__init__(*args, **kwargs)
         if not self.context['request'].query_params.get('pdf_data', 'false') == 'true':
             self.fields['positions'].child.fields.pop('pdf_data')
+
+        for exclude_field in self.context['request'].query_params.getlist('exclude'):
+            p = exclude_field.split('.')
+            if p[0] in self.fields:
+                if len(p) == 1:
+                    del self.fields[p[0]]
+                elif len(p) == 2:
+                    self.fields[p[0]].child.fields.pop(p[1])
 
     def validate_locale(self, l):
         if l not in set(k for k in self.instance.event.settings.locales):

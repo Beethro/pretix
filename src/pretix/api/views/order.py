@@ -31,7 +31,7 @@ from pretix.api.serializers.order import (
 from pretix.base.i18n import language
 from pretix.base.models import (
     CachedCombinedTicket, CachedTicket, Device, Event, Invoice, InvoiceAddress,
-    Order, OrderFee, OrderPayment, OrderPosition, OrderRefund, Quota,
+    Order, OrderFee, OrderPayment, OrderPosition, OrderRefund, Quota, SubEvent,
     TeamAPIToken, generate_position_secret, generate_secret,
 )
 from pretix.base.payment import PaymentException
@@ -61,11 +61,25 @@ with scopes_disabled():
         status = django_filters.CharFilter(field_name='status', lookup_expr='iexact')
         modified_since = django_filters.IsoDateTimeFilter(field_name='last_modified', lookup_expr='gte')
         created_since = django_filters.IsoDateTimeFilter(field_name='datetime', lookup_expr='gte')
+        subevent_after = django_filters.IsoDateTimeFilter(method='subevent_after_qs')
         search = django_filters.CharFilter(method='search_qs')
 
         class Meta:
             model = Order
             fields = ['code', 'status', 'email', 'locale', 'testmode', 'require_approval']
+
+        def subevent_after_qs(self, qs, name, value):
+            qs = qs.annotate(
+                has_se_after=Exists(
+                    OrderPosition.all.filter(
+                        subevent_id__in=SubEvent.objects.filter(
+                            Q(date_to__gt=value) | Q(date_from__gt=value, date_to__isnull=True), event=OuterRef(OuterRef('event_id'))
+                        ).values_list('id'),
+                        order_id=OuterRef('pk'),
+                    )
+                )
+            ).filter(has_se_after=True)
+            return qs
 
         def search_qs(self, qs, name, value):
             u = value
@@ -121,16 +135,19 @@ class OrderViewSet(viewsets.ModelViewSet):
         return ctx
 
     def get_queryset(self):
-        if self.request.query_params.get('include_canceled_fees', 'false') == 'true':
-            fqs = OrderFee.all
-        else:
-            fqs = OrderFee.objects
-        qs = self.request.event.orders.prefetch_related(
-            Prefetch('fees', queryset=fqs.all()),
-            'payments', 'refunds', 'refunds__payment'
-        ).select_related(
-            'invoice_address'
-        )
+        qs = self.request.event.orders
+        if 'fees' not in self.request.GET.getlist('exclude'):
+            if self.request.query_params.get('include_canceled_fees', 'false') == 'true':
+                fqs = OrderFee.all
+            else:
+                fqs = OrderFee.objects
+            qs = qs.prefetch_related(Prefetch('fees', queryset=fqs.all()))
+        if 'payments' not in self.request.GET.getlist('exclude'):
+            qs = qs.prefetch_related('payments')
+        if 'refunds' not in self.request.GET.getlist('exclude'):
+            qs = qs.prefetch_related('refunds', 'refunds__payment')
+        if 'invoice_address' not in self.request.GET.getlist('exclude'):
+            qs = qs.select_related('invoice_address')
 
         if self.request.query_params.get('include_canceled_positions', 'false') == 'true':
             opq = OrderPosition.all
@@ -167,6 +184,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 return prov
         raise NotFound('Unknown output provider.')
 
+    @scopes_disabled()  # we are sure enough that get_queryset() is correct, so we save some perforamnce
     def list(self, request, **kwargs):
         date = serializers.DateTimeField().to_representation(now())
         queryset = self.filter_queryset(self.get_queryset())

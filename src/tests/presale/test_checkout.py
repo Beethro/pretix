@@ -8,6 +8,7 @@ from unittest import mock
 
 from bs4 import BeautifulSoup
 from django.conf import settings
+from django.core import mail as djmail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils.crypto import get_random_string
@@ -2226,8 +2227,8 @@ class CheckoutTestCase(BaseCheckoutTestCase, TestCase):
             )
 
         response = self.client.post('/%s/%s/checkout/addons/' % (self.orga.slug, self.event.slug), {
-            '{}_{}-item_{}'.format(cp1.pk, self.workshopcat.pk, self.workshop1.pk): 'on',
-            '{}_{}-item_{}'.format(cp2.pk, self.workshopcat.pk, self.workshop2.pk): self.workshop2a.pk,
+            'cp_{}_item_{}'.format(cp1.pk, self.workshop1.pk): '1',
+            'cp_{}_variation_{}_{}'.format(cp2.pk, self.workshop2.pk, self.workshop2a.pk): '1',
         }, follow=True)
         self.assertRedirects(response, '/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug),
                              target_status_code=200)
@@ -2235,6 +2236,45 @@ class CheckoutTestCase(BaseCheckoutTestCase, TestCase):
             assert cp1.addons.first().item == self.workshop1
             assert cp2.addons.first().item == self.workshop2
             assert cp2.addons.first().variation == self.workshop2a
+
+    def test_set_addon_multi(self):
+        with scopes_disabled():
+            ItemAddOn.objects.create(base_item=self.ticket, addon_category=self.workshopcat, multi_allowed=True, max_count=2)
+            cp1 = CartPosition.objects.create(
+                event=self.event, cart_id=self.session_key, item=self.ticket,
+                price=23, expires=now() - timedelta(minutes=10)
+            )
+
+        response = self.client.post('/%s/%s/checkout/addons/' % (self.orga.slug, self.event.slug), {
+            'cp_{}_item_{}'.format(cp1.pk, self.workshop1.pk): '2',
+        }, follow=True)
+        self.assertRedirects(response, '/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug),
+                             target_status_code=200)
+        with scopes_disabled():
+            assert cp1.addons.count() == 2
+            assert cp1.addons.first().item == self.workshop1
+            assert cp1.addons.last().item == self.workshop1
+
+    def test_set_addon_free_price(self):
+        with scopes_disabled():
+            self.workshop1.free_price = True
+            self.workshop1.save()
+            ItemAddOn.objects.create(base_item=self.ticket, addon_category=self.workshopcat)
+            cp1 = CartPosition.objects.create(
+                event=self.event, cart_id=self.session_key, item=self.ticket,
+                price=23, expires=now() - timedelta(minutes=10)
+            )
+
+        response = self.client.post('/%s/%s/checkout/addons/' % (self.orga.slug, self.event.slug), {
+            'cp_{}_item_{}'.format(cp1.pk, self.workshop1.pk): '1',
+            'cp_{}_item_{}_price'.format(cp1.pk, self.workshop1.pk): '999,99',
+        }, follow=True)
+        self.assertRedirects(response, '/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug),
+                             target_status_code=200)
+        with scopes_disabled():
+            assert cp1.addons.count() == 1
+            assert cp1.addons.first().item == self.workshop1
+            assert cp1.addons.first().price == Decimal('999.99')
 
     def test_set_addons_required(self):
         with scopes_disabled():
@@ -2332,7 +2372,7 @@ class CheckoutTestCase(BaseCheckoutTestCase, TestCase):
         response = self.client.get('/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug), follow=True)
         self.assertRedirects(response, '/%s/%s/checkout/addons/' % (self.orga.slug, self.event.slug),
                              target_status_code=200)
-        assert 'Workshop 1 (+ €42.00)' in response.rendered_content
+        assert '42.00' in response.rendered_content
 
     def test_set_addons_subevent_net_prices(self):
         with scopes_disabled():
@@ -2358,8 +2398,8 @@ class CheckoutTestCase(BaseCheckoutTestCase, TestCase):
         response = self.client.get('/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug), follow=True)
         self.assertRedirects(response, '/%s/%s/checkout/addons/' % (self.orga.slug, self.event.slug),
                              target_status_code=200)
-        assert 'Workshop 1 (+ €35.29 plus 19.00% VAT)' in response.rendered_content
-        assert 'A (+ €10.08 plus 19.00% VAT)' in response.rendered_content
+        assert '35.29' in response.rendered_content
+        assert '10.08' in response.rendered_content
 
     def test_confirm_subevent_presale_not_yet(self):
         with scopes_disabled():
@@ -2470,6 +2510,33 @@ class CheckoutTestCase(BaseCheckoutTestCase, TestCase):
         with scopes_disabled():
             assert not Order.objects.last().testmode
             assert "0" not in Order.objects.last().code
+
+    def test_receive_order_confirmation_and_paid_mail(self):
+        with scopes_disabled():
+            cp1 = CartPosition.objects.create(
+                event=self.event, cart_id=self.session_key, item=self.ticket,
+                price=23, expires=now() + timedelta(minutes=10)
+            )
+            djmail.outbox = []
+            oid = _perform_order(self.event, 'manual', [cp1.pk], 'admin@example.org', 'en', None, {}, 'web')
+            assert len(djmail.outbox) == 1
+            o = Order.objects.get(pk=oid)
+            o.payments.first().confirm()
+            assert len(djmail.outbox) == 2
+
+    def test_order_confirmation_and_paid_mail_not_send_on_disabled_sales_channel(self):
+        with scopes_disabled():
+            cp1 = CartPosition.objects.create(
+                event=self.event, cart_id=self.session_key, item=self.ticket,
+                price=23, expires=now() + timedelta(minutes=10)
+            )
+            djmail.outbox = []
+            self.event.settings.mail_sales_channel_placed_paid = []
+            oid = _perform_order(self.event, 'manual', [cp1.pk], 'admin@example.org', 'en', None, {}, 'web')
+            assert len(djmail.outbox) == 0
+            o = Order.objects.get(pk=oid)
+            o.payments.first().confirm()
+            assert len(djmail.outbox) == 0
 
 
 class QuestionsTestCase(BaseCheckoutTestCase, TestCase):
@@ -2593,7 +2660,7 @@ class QuestionsTestCase(BaseCheckoutTestCase, TestCase):
         # Corrected request
         response = self.client.post('/%s/%s/checkout/questions/' % (self.orga.slug, self.event.slug), {
             '%s-question_%s' % (cr1.id, q1.id): '42',
-            '%s-question_%s' % (cr2.id, q1.id): '23',
+            '%s-question_%s' % (cr2.id, q1.id): '0',
             '%s-question_%s' % (cr1.id, q2.id): 'Internet',
             '%s-question_%s' % (cr2.id, q2.id): '',
             'email': 'admin@localhost'
@@ -2683,6 +2750,7 @@ class QuestionsTestCase(BaseCheckoutTestCase, TestCase):
             event=self.event, question='Why not?', type=Question.TYPE_TEXT,
             required=True, dependency_question=self.q3, dependency_values=['False']
         )
+
         self.ticket.questions.add(self.q1)
         self.ticket.questions.add(self.q2a)
         self.ticket.questions.add(self.q2b)
@@ -3152,9 +3220,9 @@ class CheckoutSeatingTest(BaseCheckoutTestCase, TestCase):
         self.event.seat_category_mappings.create(
             layout_category='Stalls', product=self.ticket
         )
-        self.seat_a1 = self.event.seats.create(name="A1", product=self.ticket, seat_guid="A1")
-        self.seat_a2 = self.event.seats.create(name="A2", product=self.ticket, seat_guid="A2")
-        self.seat_a3 = self.event.seats.create(name="A3", product=self.ticket, seat_guid="A3")
+        self.seat_a1 = self.event.seats.create(seat_number="A1", product=self.ticket, seat_guid="A1")
+        self.seat_a2 = self.event.seats.create(seat_number="A2", product=self.ticket, seat_guid="A2")
+        self.seat_a3 = self.event.seats.create(seat_number="A3", product=self.ticket, seat_guid="A3")
         self.cp1 = CartPosition.objects.create(
             event=self.event, cart_id=self.session_key, item=self.ticket,
             price=21.5, expires=now() + timedelta(minutes=10), seat=self.seat_a1
@@ -3175,6 +3243,13 @@ class CheckoutSeatingTest(BaseCheckoutTestCase, TestCase):
         with self.assertRaises(OrderError):
             _perform_order(self.event, 'manual', [self.cp1.pk], 'admin@example.org', 'en', None, {}, 'web')
         assert not CartPosition.objects.filter(pk=self.cp1.pk).exists()
+
+    @scopes_disabled()
+    def test_seat_not_required_if_no_choice(self):
+        self.cp1.seat = None
+        self.cp1.save()
+        self.event.settings.seating_choice = False
+        _perform_order(self.event, 'manual', [self.cp1.pk], 'admin@example.org', 'en', None, {}, 'web')
 
     @scopes_disabled()
     def test_seat_not_allowed(self):

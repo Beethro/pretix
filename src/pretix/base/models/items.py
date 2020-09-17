@@ -118,7 +118,7 @@ class SubEventItem(models.Model):
     subevent = models.ForeignKey('SubEvent', on_delete=models.CASCADE)
     item = models.ForeignKey('Item', on_delete=models.CASCADE)
     price = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
-    disabled = models.BooleanField(default=False)
+    disabled = models.BooleanField(default=False, verbose_name=_('Disable product for this date'))
 
     def delete(self, *args, **kwargs):
         super().delete(*args, **kwargs)
@@ -378,9 +378,9 @@ class Item(LoggedModel):
                     'but only for fixed bundles!')
     )
     allow_cancel = models.BooleanField(
-        verbose_name=_('Allow product to be canceled'),
+        verbose_name=_('Allow product to be canceled or changed'),
         default=True,
-        help_text=_('If this is checked, the usual cancellation settings of this event apply. If this is unchecked, '
+        help_text=_('If this is checked, the usual cancellation and order change settings of this event apply. If this is unchecked, '
                     'orders containing this product can not be canceled by users but only by you.')
     )
     min_per_order = models.IntegerField(
@@ -412,7 +412,8 @@ class Item(LoggedModel):
     )
     sales_channels = fields.MultiStringField(
         verbose_name=_('Sales channels'),
-        default=['web']
+        default=['web'],
+        blank=True,
     )
     issue_giftcard = models.BooleanField(
         verbose_name=_('This product is a gift card'),
@@ -839,6 +840,10 @@ class ItemAddOn(models.Model):
         verbose_name=_('Add-Ons are included in the price'),
         help_text=_('If selected, adding add-ons to this ticket is free, even if the add-ons would normally cost '
                     'money individually.')
+    )
+    multi_allowed = models.BooleanField(
+        default=False,
+        verbose_name=_('Allow the same product to be selected multiple times'),
     )
     position = models.PositiveIntegerField(
         default=0,

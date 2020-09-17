@@ -12,8 +12,8 @@ from django.utils.translation import gettext_lazy as _, pgettext_lazy
 
 from pretix.base.forms.widgets import DatePickerWidget
 from pretix.base.models import (
-    Checkin, Event, EventMetaProperty, EventMetaValue, Invoice, Item, Order,
-    OrderPayment, OrderPosition, OrderRefund, Organizer, Question,
+    Checkin, Event, EventMetaProperty, EventMetaValue, Invoice, InvoiceAddress,
+    Item, Order, OrderPayment, OrderPosition, OrderRefund, Organizer, Question,
     QuestionAnswer, SubEvent,
 )
 from pretix.base.signals import register_payment_providers
@@ -139,26 +139,34 @@ class OrderFilterForm(FilterForm):
                 | Q(invoice_no__iexact=u.zfill(5))
                 | Q(full_invoice_no__iexact=u)
             ).values_list('order_id', flat=True)
-
             matching_positions = OrderPosition.objects.filter(
-                Q(order=OuterRef('pk')) & Q(
+                Q(
                     Q(attendee_name_cached__icontains=u) | Q(attendee_email__icontains=u)
-                    | Q(secret__istartswith=u) | Q(voucher__code__icontains=u)
+                    | Q(secret__istartswith=u)
+                    | Q(pseudonymization_id__istartswith=u)
                 )
-            ).values('id')
-
-            mainq = (
+            ).values_list('order_id', flat=True)
+            matching_invoice_addresses = InvoiceAddress.objects.filter(
+                Q(
+                    Q(name_cached__icontains=u) | Q(company__icontains=u)
+                )
+            ).values_list('order_id', flat=True)
+            matching_orders = Order.objects.filter(
                 code
                 | Q(email__icontains=u)
-                | Q(invoice_address__name_cached__icontains=u)
-                | Q(invoice_address__company__icontains=u)
-                | Q(pk__in=matching_invoices)
                 | Q(comment__icontains=u)
-                | Q(has_pos=True)
+            ).values_list('id', flat=True)
+
+            mainq = (
+                Q(pk__in=matching_orders)
+                | Q(pk__in=matching_invoices)
+                | Q(pk__in=matching_positions)
+                | Q(pk__in=matching_invoice_addresses)
+                | Q(pk__in=matching_invoices)
             )
             for recv, q in order_search_filter_q.send(sender=getattr(self, 'event', None), query=u):
                 mainq = mainq | q
-            qs = qs.annotate(has_pos=Exists(matching_positions)).filter(
+            qs = qs.filter(
                 mainq
             )
 
@@ -837,6 +845,7 @@ class CheckInFilterForm(FilterForm):
         label=_('Check-in status'),
         choices=(
             ('', _('All attendees')),
+            ('3', pgettext_lazy('checkin state', 'Checked in but left')),
             ('2', pgettext_lazy('checkin state', 'Present')),
             ('1', _('Checked in')),
             ('0', _('Not checked in')),
@@ -867,6 +876,7 @@ class CheckInFilterForm(FilterForm):
             qs = qs.filter(
                 Q(order__code__istartswith=u)
                 | Q(secret__istartswith=u)
+                | Q(pseudonymization_id__istartswith=u)
                 | Q(order__email__icontains=u)
                 | Q(attendee_name_cached__icontains=u)
                 | Q(attendee_email__icontains=u)
@@ -882,6 +892,10 @@ class CheckInFilterForm(FilterForm):
             elif s == '2':
                 qs = qs.filter(last_entry__isnull=False).filter(
                     Q(last_exit__isnull=True) | Q(last_exit__lt=F('last_entry'))
+                )
+            elif s == '3':
+                qs = qs.filter(last_entry__isnull=False).filter(
+                    Q(last_exit__isnull=False) & Q(last_exit__gte=F('last_entry'))
                 )
             elif s == '0':
                 qs = qs.filter(last_entry__isnull=True)
