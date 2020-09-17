@@ -15,10 +15,11 @@ from pretix.presale.views import (
     allow_frame_if_namespaced, cart_exists, get_cart,
     iframe_entry_view_wrapper,
 )
+from pretix.control.permissions import TUWLoginRequiredMixin
 
 @method_decorator(allow_frame_if_namespaced, 'dispatch')
 @method_decorator(iframe_entry_view_wrapper, 'dispatch')
-class CheckoutView(View):
+class CheckoutView(TUWLoginRequiredMixin, View):
 
     def get_index_url(self, request):
         kwargs = {}
